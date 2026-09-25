@@ -1,0 +1,46 @@
+[project]
+name = "dubforge"
+version = "0.1.0"
+description = "Video localisation SaaS MVP"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "mypy>=1.15",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.25",
+  "ruff>=0.9",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+  "apps/api",
+  "pipeline",
+  "packages/contracts",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["apps/api/src", "pipeline/src", "packages/contracts/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["apps/api/tests", "pipeline/tests", "packages/contracts/tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["dubforge_api", "dubforge_pipeline", "dubforge_contracts"]
+mypy_path = [
+  "apps/api/src",
+  "pipeline/src",
+  "packages/contracts/src",
+]
