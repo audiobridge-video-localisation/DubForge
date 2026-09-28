@@ -9,7 +9,11 @@ def extract_audio(video_path: str, output_path: str) -> str:
         "-vn", "-ac", "1", "-ar", "16000",
         output_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"ffmpeg not found: {exc}") from exc
+    
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed: {result.stderr}")
     if not Path(output_path).exists():
