@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: mypy
+        name: mypy
+        entry: uv run mypy apps/api/src pipeline/src packages/contracts/src
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: web-lint
+        name: web lint
+        entry: npm --prefix apps/web run lint
+        language: system
+        pass_filenames: false
+        files: ^apps/web/
+        stages: [pre-commit]
+      - id: web-format
+        name: web format
+        entry: npm --prefix apps/web run format
+        language: system
+        pass_filenames: false
+        files: ^apps/web/
+        stages: [pre-commit]
