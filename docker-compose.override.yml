@@ -1,0 +1,6 @@
+# Local development only: live-mounts source code. Not used in production/Render.
+services:
+  pipeline:
+    volumes:
+      - ./pipeline:/app/pipeline
+      - ./packages:/app/packages
