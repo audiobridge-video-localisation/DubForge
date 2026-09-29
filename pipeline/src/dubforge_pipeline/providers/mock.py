@@ -27,5 +27,8 @@ class MockTranslationProvider(TranslationProvider):
 
 
 class MockTTSProvider(TTSProvider):
-    def synthesize(self, text: str, voice_profile: str) -> AudioResult:
-        return AudioResult(audio_path="/tmp/mock_audio.wav", actual_duration_ms=2000)
+    def synthesize(
+        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+    ) -> AudioResult:
+        actual_duration_ms = target_duration_ms if target_duration_ms is not None else 2000
+        return AudioResult(audio_path="/tmp/mock_audio.wav", actual_duration_ms=actual_duration_ms)
