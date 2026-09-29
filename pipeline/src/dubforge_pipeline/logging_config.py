@@ -4,7 +4,7 @@ import sys
 
 
 def configure_logging() -> None:
-    level_name = os.environ.get("LOG_LEVEL", "INFO")
+    level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
     handler = logging.StreamHandler(stream=sys.stdout)
     handler.setFormatter(
         logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")

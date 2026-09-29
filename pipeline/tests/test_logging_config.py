@@ -15,3 +15,9 @@ def test_configure_logging_defaults_to_info(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     configure_logging()
     assert logging.getLogger().level == logging.INFO
+
+
+def test_configure_logging_accepts_lowercase_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "debug")
+    configure_logging()
+    assert logging.getLogger().level == logging.DEBUG
