@@ -5,8 +5,15 @@ from pathlib import Path
 def extract_audio(video_path: str, output_path: str, timeout_s: int = 600) -> str:
     """Extract mono 16kHz WAV audio from a video file using ffmpeg."""
     cmd = [
-        "ffmpeg", "-y", "-i", video_path,
-        "-vn", "-ac", "1", "-ar", "16000",
+        "ffmpeg",
+        "-y",
+        "-i",
+        video_path,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
         output_path,
     ]
     try:

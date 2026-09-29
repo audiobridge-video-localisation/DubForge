@@ -13,9 +13,7 @@ def test_extract_audio_raises_on_missing_file(tmp_path: Path) -> None:
         extract_audio("nonexistent_video.mp4", str(tmp_path / "out.wav"))
 
 
-def test_extract_audio_raises_on_timeout(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_extract_audio_raises_on_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=1)
 
@@ -32,9 +30,16 @@ def test_extract_audio_produces_mono_16khz_wav(tmp_path: Path) -> None:
 
     subprocess.run(
         [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
-            "-f", "lavfi", "-i", "color=c=black:s=320x240:d=2",
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=320x240:d=2",
             "-shortest",
             str(video_path),
         ],
@@ -50,10 +55,15 @@ def test_extract_audio_produces_mono_16khz_wav(tmp_path: Path) -> None:
 
     probe = subprocess.run(
         [
-            "ffprobe", "-v", "error",
-            "-select_streams", "a:0",
-            "-show_entries", "stream=channels,sample_rate",
-            "-of", "json",
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=channels,sample_rate",
+            "-of",
+            "json",
             str(output_path),
         ],
         capture_output=True,
