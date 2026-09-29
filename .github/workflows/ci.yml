@@ -12,6 +12,22 @@ jobs:
   python:
     name: Python checks
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dubforge
+          POSTGRES_USER: dubforge
+          POSTGRES_PASSWORD: dubforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dubforge -d dubforge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://dubforge:dubforge@localhost:5432/dubforge
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -29,6 +45,8 @@ jobs:
         run: uv run ruff check .
       - name: Type check
         run: uv run mypy apps/api/src pipeline/src packages/contracts/src
+      - name: Run migrations
+        run: uv run alembic -c apps/api/alembic.ini upgrade head
       - name: Test
         run: uv run pytest
 
