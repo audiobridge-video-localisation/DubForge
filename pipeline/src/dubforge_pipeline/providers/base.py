@@ -25,5 +25,7 @@ class TranslationProvider(ABC):
 
 class TTSProvider(ABC):
     @abstractmethod
-    def synthesize(self, text: str, voice_profile: str) -> AudioResult:
+    def synthesize(
+        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+    ) -> AudioResult:
         ...

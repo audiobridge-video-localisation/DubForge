@@ -27,6 +27,19 @@ services:
       timeout: 5s
       retries: 10
 
+  pipeline:
+    build:
+      context: .
+      dockerfile: pipeline/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./pipeline:/app/pipeline
+      - ./packages:/app/packages
+
 volumes:
   postgres-data:
   redis-data:
