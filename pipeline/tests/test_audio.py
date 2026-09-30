@@ -10,7 +10,6 @@ from dubforge_pipeline.audio import extract_audio
 
 def test_extract_audio_raises_on_missing_file(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError):
-<<<<<<< HEAD
         extract_audio("nonexistent_video.mp4", str(tmp_path / "out.wav"))
 
 
@@ -74,6 +73,3 @@ def test_extract_audio_produces_mono_16khz_wav(tmp_path: Path) -> None:
     stream_info = json.loads(probe.stdout)["streams"][0]
     assert stream_info["channels"] == 1
     assert stream_info["sample_rate"] == "16000"
-=======
-        extract_audio("nonexistent_video.mp4", "out.wav")
->>>>>>> origin/dev
