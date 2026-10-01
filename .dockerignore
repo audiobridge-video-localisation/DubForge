@@ -6,3 +6,10 @@
 **/.mypy_cache
 **/.ruff_cache
 node_modules
+apps/web
+**/tests
+.env
+.env.*
+.github
+docker-compose*.yml
+*.md
