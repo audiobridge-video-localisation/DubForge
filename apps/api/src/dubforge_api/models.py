@@ -68,6 +68,7 @@ class Segment(Base):
     duration_ms: Mapped[int] = mapped_column(nullable=False)
     speaker_label: Mapped[str] = mapped_column(String(255), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    translated_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
