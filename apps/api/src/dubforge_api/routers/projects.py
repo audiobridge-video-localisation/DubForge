@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from dubforge_api.db import get_db
 from dubforge_api.models import Media, Project
 from dubforge_api.schemas import MediaWithJob, ProjectCreate, ProjectDetailRead, ProjectRead
-from dubforge_contracts.models import JobRead, MediaRead
+from dubforge_contracts.models import JobRead, MediaRead, Segment
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -34,7 +34,10 @@ async def get_project(
 ) -> ProjectDetailRead:
     result = await db.execute(
         select(Project)
-        .options(selectinload(Project.media).selectinload(Media.job))
+        .options(
+            selectinload(Project.media).selectinload(Media.job),
+            selectinload(Project.media).selectinload(Media.segments),
+        )
         .where(Project.id == project_id)
     )
     project = result.scalar_one_or_none()
@@ -42,7 +45,11 @@ async def get_project(
         raise HTTPException(status_code=404, detail="Project not found")
 
     media = [
-        MediaWithJob(media=MediaRead.model_validate(item), job=JobRead.model_validate(item.job))
+        MediaWithJob(
+            media=MediaRead.model_validate(item),
+            job=JobRead.model_validate(item.job),
+            segments=[Segment.model_validate(s) for s in item.segments],
+        )
         for item in project.media
         if item.job is not None
     ]

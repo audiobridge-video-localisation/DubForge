@@ -27,9 +27,19 @@ export interface Job {
   updated_at: string;
 }
 
+export interface Segment {
+  index: number;
+  start_ms: number;
+  end_ms: number;
+  duration_ms: number;
+  speaker_label: string;
+  text: string;
+}
+
 export interface MediaWithJob {
   media: Media;
   job: Job;
+  segments: Segment[];
 }
 
 export interface ProjectDetail extends Project {

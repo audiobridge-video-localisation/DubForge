@@ -10,9 +10,15 @@ from dubforge_contracts.models import (
     JobCallbackUpdate,
     JobQueueMessage,
     JobStatus,
+    Segment,
+    SpeakerSegment,
+    TranscriptSegment,
 )
 from dubforge_pipeline.audio import extract_audio
 from dubforge_pipeline.logging_config import configure_logging
+from dubforge_pipeline.providers.assemblyai import transcribe_with_diarization
+from dubforge_pipeline.providers.mock import MockDiarizationProvider, MockSTTProvider
+from dubforge_pipeline.segments import combine_segments
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +42,26 @@ def _report(
         logger.exception("Failed to report status for job %s", job_id)
 
 
+def _get_transcription(audio_path: str) -> tuple[list[TranscriptSegment], list[SpeakerSegment]]:
+    api_key = os.environ.get("ASSEMBLYAI_API_KEY")
+    if api_key:
+        return transcribe_with_diarization(audio_path, api_key)
+    return (
+        MockSTTProvider().transcribe(audio_path),
+        MockDiarizationProvider().diarize(audio_path),
+    )
+
+
+def _submit_segments(
+    client: httpx.Client, api_base_url: str, media_id: str, segments: list[Segment]
+) -> None:
+    response = client.put(
+        f"{api_base_url}/internal/media/{media_id}/segments",
+        json=[segment.model_dump(mode="json") for segment in segments],
+    )
+    response.raise_for_status()
+
+
 def process_job(
     client: httpx.Client, api_base_url: str, storage_root: str, message: JobQueueMessage
 ) -> None:
@@ -44,9 +70,15 @@ def process_job(
     try:
         input_path = str(Path(storage_root) / message.storage_path)
         output_path = f"{input_path}.wav"
-        _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=40)
+        _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=30)
         extract_audio(input_path, output_path)
-        _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=80)
+
+        _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=70)
+        transcripts, speakers = _get_transcription(output_path)
+        segments = combine_segments(transcripts, speakers)
+
+        _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=90)
+        _submit_segments(client, api_base_url, str(message.media_id), segments)
     except Exception as exc:  # defensive: never let a bad job crash the worker loop
         logger.exception("Job %s failed", job_id)
         _report(client, api_base_url, job_id, JobStatus.FAILED, error_message=str(exc))

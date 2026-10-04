@@ -6,12 +6,14 @@ today — this is an internal trust-boundary callback target for the worker.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dubforge_api.db import get_db
-from dubforge_api.models import Job
-from dubforge_contracts.models import JobCallbackUpdate, JobRead
+from dubforge_api.models import Job, Media
+from dubforge_api.models import Segment as SegmentModel
+from dubforge_contracts.models import JobCallbackUpdate, JobRead, Segment
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -32,3 +34,28 @@ async def update_job(
     await db.commit()
     await db.refresh(job, attribute_names=["updated_at"])
     return job
+
+
+@router.put("/media/{media_id}/segments", status_code=status.HTTP_204_NO_CONTENT)
+async def replace_segments(
+    media_id: uuid.UUID, payload: list[Segment], db: AsyncSession = Depends(get_db)
+) -> Response:
+    media = await db.get(Media, media_id)
+    if media is None:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    await db.execute(delete(SegmentModel).where(SegmentModel.media_id == media_id))
+    db.add_all(
+        SegmentModel(
+            media_id=media_id,
+            index=segment.index,
+            start_ms=segment.start_ms,
+            end_ms=segment.end_ms,
+            duration_ms=segment.duration_ms,
+            speaker_label=segment.speaker_label,
+            text=segment.text,
+        )
+        for segment in payload
+    )
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

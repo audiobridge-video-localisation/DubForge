@@ -69,4 +69,17 @@ class JobCallbackUpdate(BaseModel):
     error_message: str | None = None
 
 
+class Segment(BaseModel):
+    """An ordered, speaker-labeled transcript segment for a piece of media."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    index: int
+    start_ms: int
+    end_ms: int
+    duration_ms: int
+    speaker_label: str
+    text: str
+
+
 JOB_QUEUE_KEY = "dubforge:jobs"

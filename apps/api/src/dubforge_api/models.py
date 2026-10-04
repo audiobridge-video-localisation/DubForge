@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dubforge_api.db import Base
@@ -33,6 +33,9 @@ class Media(Base):
 
     project: Mapped[Project] = relationship(back_populates="media")
     job: Mapped["Job | None"] = relationship(back_populates="media", uselist=False)
+    segments: Mapped[list["Segment"]] = relationship(
+        back_populates="media", order_by="Segment.index"
+    )
 
 
 class Job(Base):
@@ -52,3 +55,21 @@ class Job(Base):
     )
 
     media: Mapped[Media] = relationship(back_populates="job")
+
+
+class Segment(Base):
+    __tablename__ = "segments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    media_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("media.id"), nullable=False)
+    index: Mapped[int] = mapped_column(nullable=False)
+    start_ms: Mapped[int] = mapped_column(nullable=False)
+    end_ms: Mapped[int] = mapped_column(nullable=False)
+    duration_ms: Mapped[int] = mapped_column(nullable=False)
+    speaker_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    media: Mapped[Media] = relationship(back_populates="segments")

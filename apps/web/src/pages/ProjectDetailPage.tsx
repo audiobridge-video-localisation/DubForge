@@ -15,6 +15,13 @@ function isInFlight(item: MediaWithJob): boolean {
   return item.job.status === "pending" || item.job.status === "processing";
 }
 
+function formatTimestamp(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
@@ -119,6 +126,21 @@ export function ProjectDetailPage() {
                       Retry
                     </button>
                   </>
+                )}
+                {item.segments.length > 0 && (
+                  <ol>
+                    {item.segments.map((segment) => (
+                      <li key={segment.index}>
+                        <strong>{segment.speaker_label}</strong>{" "}
+                        <span>
+                          [{formatTimestamp(segment.start_ms)}–
+                          {formatTimestamp(segment.end_ms)}, duration{" "}
+                          {formatTimestamp(segment.duration_ms)}]
+                        </span>
+                        <p>{segment.text}</p>
+                      </li>
+                    ))}
+                  </ol>
                 )}
               </li>
             ))}
