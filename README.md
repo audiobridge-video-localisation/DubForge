@@ -95,3 +95,27 @@ in the team change log.
 
 Copy `.env.example` to `.env` for local development. Never commit real
 credentials or provider keys.
+
+## STT providers & benchmarking
+
+The pipeline's speech-to-text provider is selected at runtime via
+`dubforge_pipeline.providers.registry.get_stt_provider()`, driven by env vars:
+
+- `STT_PROVIDER` - `mock` (default) or `whisper`
+- `WHISPER_MODEL` - faster-whisper model size (default `small.en`)
+- `WHISPER_DEVICE` - `cpu` or `cuda` (default `cpu`)
+- `WHISPER_COMPUTE_TYPE` - faster-whisper compute type, e.g. `int8`, `float16` (default `int8`)
+
+The first transcription with `STT_PROVIDER=whisper` downloads the selected
+model from Hugging Face (~500MB for `small.en`) and caches it locally.
+
+Benchmark a provider against a video file:
+
+```bash
+uv run python scripts/benchmark_stt.py path/to/video.mp4 --provider whisper --model small.en
+```
+
+This extracts audio, transcribes it, and appends timing/memory/accuracy
+metrics as a JSON line to `benchmarks/results.jsonl`, plus a plain-text
+transcript under `benchmarks/` for manual review. The `benchmarks/` directory
+is local-only and gitignored.
