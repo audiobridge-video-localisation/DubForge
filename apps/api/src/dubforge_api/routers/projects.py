@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from dubforge_api.db import get_db
 from dubforge_api.models import Media, Project
 from dubforge_api.schemas import MediaWithJob, ProjectCreate, ProjectDetailRead, ProjectRead
-from dubforge_contracts.models import JobRead, MediaRead, Segment
+from dubforge_contracts.models import JobRead, MediaRead, Segment, SegmentReviewStatus
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -49,6 +49,10 @@ async def get_project(
             media=MediaRead.model_validate(item),
             job=JobRead.model_validate(item.job),
             segments=[Segment.model_validate(s) for s in item.segments],
+            approved_count=sum(
+                1 for s in item.segments if s.review_status == SegmentReviewStatus.APPROVED.value
+            ),
+            total_count=len(item.segments),
         )
         for item in project.media
         if item.job is not None

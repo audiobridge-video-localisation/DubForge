@@ -15,6 +15,7 @@ app.add_middleware(
 
 app.include_router(projects.router)
 app.include_router(media.router)
+app.include_router(media.media_router)
 app.include_router(jobs.router)
 app.include_router(internal.router)
 app.include_router(segments.router)

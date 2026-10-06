@@ -14,6 +14,7 @@ export interface Media {
   filename: string;
   storage_path: string;
   created_at: string;
+  ready_for_dubbing: boolean;
 }
 
 export interface Job {
@@ -27,6 +28,8 @@ export interface Job {
   updated_at: string;
 }
 
+export type SegmentReviewStatus = "pending" | "approved" | "needs_changes";
+
 export interface Segment {
   id: string;
   index: number;
@@ -36,11 +39,13 @@ export interface Segment {
   speaker_label: string;
   text: string;
   translated_text: string | null;
+  review_status: SegmentReviewStatus;
 }
 
 export interface SegmentUpdate {
   text?: string;
   translated_text?: string;
+  speaker_label?: string;
   start_ms?: number;
   end_ms?: number;
 }
@@ -49,6 +54,8 @@ export interface MediaWithJob {
   media: Media;
   job: Job;
   segments: Segment[];
+  approved_count: number;
+  total_count: number;
 }
 
 export interface ProjectDetail extends Project {
@@ -129,5 +136,21 @@ export function updateSegment(
   return request<Segment>(`/segments/${segmentId}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
+  });
+}
+
+export function approveSegment(segmentId: string): Promise<Segment> {
+  return request<Segment>(`/segments/${segmentId}/approve`, { method: "POST" });
+}
+
+export function requestSegmentChanges(segmentId: string): Promise<Segment> {
+  return request<Segment>(`/segments/${segmentId}/request-changes`, {
+    method: "POST",
+  });
+}
+
+export function markReadyForDubbing(mediaId: string): Promise<Media> {
+  return request<Media>(`/media/${mediaId}/ready-for-dubbing`, {
+    method: "POST",
   });
 }
