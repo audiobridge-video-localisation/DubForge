@@ -1,11 +1,14 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dubforge_api.config import get_settings
 from dubforge_api.db import Base, engine, get_db
 from dubforge_api.main import app
+from dubforge_api.redis_client import get_redis
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -35,6 +38,34 @@ async def db_session() -> AsyncIterator[AsyncSession]:
             app.dependency_overrides.pop(get_db, None)
             await session.close()
             await transaction.rollback()
+
+
+class FakeRedis:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    async def rpush(self, key: str, value: str) -> None:
+        self.calls.append((key, value))
+
+
+@pytest.fixture
+def fake_redis() -> FakeRedis:
+    return FakeRedis()
+
+
+@pytest.fixture(autouse=True)
+def _override_redis(fake_redis: FakeRedis) -> Iterator[None]:
+    app.dependency_overrides[get_redis] = lambda: fake_redis
+    yield
+    app.dependency_overrides.pop(get_redis, None)
+
+
+@pytest.fixture(autouse=True)
+def _override_storage_dir(tmp_path: Path) -> Iterator[None]:
+    settings = get_settings().model_copy(update={"storage_dir": str(tmp_path)})
+    app.dependency_overrides[get_settings] = lambda: settings
+    yield
+    app.dependency_overrides.pop(get_settings, None)
 
 
 @pytest.fixture

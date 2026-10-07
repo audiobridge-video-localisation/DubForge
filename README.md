@@ -50,7 +50,8 @@ GitHub Actions.
 Start local infrastructure:
 
 ```bash
-docker compose up -d postgres redis
+mkdir -p media
+docker compose up -d postgres redis pipeline
 ```
 
 Apply database migrations:
@@ -67,6 +68,10 @@ uv run uvicorn dubforge_api.main:app --app-dir apps/api/src --reload
 
 The health endpoint is available at <http://localhost:8000/health>, and the
 project CRUD endpoints are available at <http://localhost:8000/projects>.
+Uploading a video via `POST /projects/{id}/media` saves it under `media/`,
+queues a processing job on Redis, and the `pipeline` worker picks it up,
+reporting progress back via `PATCH /internal/jobs/{id}`. Poll `GET
+/jobs/{id}` for status, or `POST /jobs/{id}/retry` to re-queue a failed job.
 
 Run the web app:
 
@@ -87,9 +92,10 @@ uv lock
 uv sync --all-packages
 ```
 
-The shared contract is intentionally empty apart from a package marker until the
-Project, Media, Segment, Job, and Artifact fields and state machines are agreed
-in the team change log.
+The shared contract carries `Media`/`Job` types now, since the api and
+pipeline worker need to agree on a wire format to talk to each other over
+Redis/HTTP. `Project`, `Segment`, and `Artifact` fields and state machines
+are still pending agreement in the team change log.
 
 ## Environment
 

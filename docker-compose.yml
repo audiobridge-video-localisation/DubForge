@@ -34,6 +34,13 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       LOG_LEVEL: INFO
+      API_BASE_URL: http://host.docker.internal:8000
+      STORAGE_DIR: /app/data
+      ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:-}
+    volumes:
+      - ./media:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       redis:
         condition: service_healthy
