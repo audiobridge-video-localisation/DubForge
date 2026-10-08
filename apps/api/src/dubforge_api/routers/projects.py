@@ -6,9 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from dubforge_api.db import get_db
+from dubforge_api.models import Artifact as ArtifactModel
 from dubforge_api.models import Media, Project
-from dubforge_api.schemas import MediaWithJob, ProjectCreate, ProjectDetailRead, ProjectRead
-from dubforge_contracts.models import JobRead, MediaRead, Segment, SegmentReviewStatus
+from dubforge_api.schemas import (
+    MediaWithJob,
+    ProjectCreate,
+    ProjectDetailRead,
+    ProjectRead,
+    segment_to_contract,
+)
+from dubforge_contracts.models import JobRead, MediaRead, SegmentReviewStatus
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -44,11 +51,21 @@ async def get_project(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    segment_ids = [s.id for item in project.media for s in item.segments]
+    artifacts_result = await db.execute(
+        select(ArtifactModel).where(ArtifactModel.segment_id.in_(segment_ids))
+    )
+    # Queried directly by FK rather than via the Segment.artifact
+    # relationship — see segments.py's _get_artifact_for_segment for why.
+    artifact_by_segment_id = {a.segment_id: a for a in artifacts_result.scalars()}
+
     media = [
         MediaWithJob(
             media=MediaRead.model_validate(item),
             job=JobRead.model_validate(item.job),
-            segments=[Segment.model_validate(s) for s in item.segments],
+            segments=[
+                segment_to_contract(s, artifact_by_segment_id.get(s.id)) for s in item.segments
+            ],
             approved_count=sum(
                 1 for s in item.segments if s.review_status == SegmentReviewStatus.APPROVED.value
             ),

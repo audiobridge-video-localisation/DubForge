@@ -6,8 +6,23 @@ from typing import Any
 import httpx
 import pytest
 
-from dubforge_contracts.models import JobQueueMessage, Segment
+from dubforge_contracts.models import ArtifactQueueMessage, AudioResult, JobQueueMessage, Segment
 from dubforge_pipeline import worker
+from dubforge_pipeline.providers.base import TTSProvider
+
+
+class _FakeTTSProvider(TTSProvider):
+    def synthesize(
+        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+    ) -> AudioResult:
+        return AudioResult(audio_path="/tmp/fake_audio.wav", actual_duration_ms=2000)
+
+
+class _RaisingTTSProvider(TTSProvider):
+    def synthesize(
+        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+    ) -> AudioResult:
+        raise RuntimeError("tts exploded")
 
 
 def _client_recording(calls: list[Any]) -> httpx.Client:
@@ -96,3 +111,37 @@ def test_process_job_reports_failure_on_exception(
 
     assert calls[-1]["status"] == "failed"
     assert "ffmpeg exploded" in str(calls[-1]["error_message"])
+
+
+def test_process_artifact_reports_progress_and_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[Any] = []
+    monkeypatch.setattr(
+        worker,
+        "_get_tts_provider",
+        lambda: _FakeTTSProvider(),
+    )
+
+    message = ArtifactQueueMessage(artifact_id=uuid.uuid4(), segment_id=uuid.uuid4(), text="Hola")
+    with _client_recording(calls) as client:
+        worker.process_artifact(client, "http://api", message)
+
+    statuses = _status_calls(calls)
+    assert statuses == ["processing", "completed"]
+    assert calls[-1]["audio_path"] == "/tmp/fake_audio.wav"
+    assert calls[-1]["duration_ms"] == 2000
+
+
+def test_process_artifact_reports_failure_on_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[Any] = []
+    monkeypatch.setattr(worker, "_get_tts_provider", lambda: _RaisingTTSProvider())
+
+    message = ArtifactQueueMessage(artifact_id=uuid.uuid4(), segment_id=uuid.uuid4(), text="Hola")
+    with _client_recording(calls) as client:
+        worker.process_artifact(client, "http://api", message)
+
+    assert calls[-1]["status"] == "failed"
+    assert "tts exploded" in str(calls[-1]["error_message"])

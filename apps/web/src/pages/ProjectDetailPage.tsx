@@ -5,10 +5,12 @@ import {
   approveSegment,
   getProject,
   markReadyForDubbing,
+  regenerateSegment,
   requestSegmentChanges,
   retryJob,
   updateSegment,
   uploadMedia,
+  type Artifact,
   type MediaWithJob,
   type Project,
   type Segment,
@@ -20,6 +22,18 @@ const REVIEW_STATUS_LABELS = {
   approved: "Approved",
   needs_changes: "Needs changes",
 };
+
+const ARTIFACT_STATUS_LABELS = {
+  pending: "Pending",
+  processing: "Processing",
+  completed: "Completed",
+  failed: "Failed",
+  outdated: "Outdated",
+};
+
+function isArtifactInFlight(artifact: Artifact | null): boolean {
+  return artifact?.status === "pending" || artifact?.status === "processing";
+}
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -71,11 +85,13 @@ function SegmentRow({
   onSave,
   onApprove,
   onRequestChanges,
+  onRegenerate,
 }: {
   segment: Segment;
   onSave: (segmentId: string, patch: SegmentUpdate) => Promise<void>;
   onApprove: (segmentId: string) => Promise<void>;
   onRequestChanges: (segmentId: string) => Promise<void>;
+  onRegenerate: (segmentId: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<SegmentDraft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -83,6 +99,7 @@ function SegmentRow({
   const [reviewActionError, setReviewActionError] = useState<string | null>(
     null,
   );
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   const isEditing = draft !== null;
   const isDirty =
@@ -132,6 +149,15 @@ function SegmentRow({
     }
   }
 
+  async function handleRegenerate() {
+    setRegenerateError(null);
+    try {
+      await onRegenerate(segment.id);
+    } catch (err) {
+      setRegenerateError((err as Error).message);
+    }
+  }
+
   return (
     <li>
       <span>{REVIEW_STATUS_LABELS[segment.review_status]}</span>{" "}
@@ -158,7 +184,29 @@ function SegmentRow({
           </button>{" "}
           <button type="button" onClick={handleRequestChanges}>
             Request changes
+          </button>{" "}
+          <button
+            type="button"
+            onClick={handleRegenerate}
+            disabled={isArtifactInFlight(segment.artifact)}
+          >
+            Regenerate
           </button>
+          <p>
+            Artifact:{" "}
+            {segment.artifact
+              ? ARTIFACT_STATUS_LABELS[segment.artifact.status]
+              : "None yet"}
+            {segment.artifact?.audio_path &&
+              ` (${segment.artifact.audio_path})`}
+            {segment.artifact?.duration_ms != null &&
+              `, ${segment.artifact.duration_ms}ms`}
+          </p>
+          {segment.artifact?.status === "failed" &&
+            segment.artifact.error_message && (
+              <p role="alert">{segment.artifact.error_message}</p>
+            )}
+          {regenerateError && <p role="alert">{regenerateError}</p>}
         </>
       ) : (
         <>
@@ -256,7 +304,12 @@ export function ProjectDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!id || !media.some(isInFlight)) return;
+    const anyInFlight = media.some(
+      (item) =>
+        isInFlight(item) ||
+        item.segments.some((s) => isArtifactInFlight(s.artifact)),
+    );
+    if (!id || !anyInFlight) return;
 
     const interval = setInterval(() => {
       getProject(id).then((detail) => setMedia(detail.media));
@@ -337,6 +390,21 @@ export function ProjectDetailPage() {
   ) {
     const updated = await requestSegmentChanges(segmentId);
     applySegmentUpdate(mediaId, segmentId, updated);
+  }
+
+  async function handleSegmentRegenerate(mediaId: string, segmentId: string) {
+    const artifact = await regenerateSegment(segmentId);
+    setMedia((current) =>
+      current.map((item) => {
+        if (item.media.id !== mediaId) return item;
+        return {
+          ...item,
+          segments: item.segments.map((s) =>
+            s.id === segmentId ? { ...s, artifact } : s,
+          ),
+        };
+      }),
+    );
   }
 
   async function handleReadyForDubbing(mediaId: string) {
@@ -437,6 +505,9 @@ export function ProjectDetailPage() {
                               item.media.id,
                               segmentId,
                             )
+                          }
+                          onRegenerate={(segmentId) =>
+                            handleSegmentRegenerate(item.media.id, segmentId)
                           }
                         />
                       ))}
