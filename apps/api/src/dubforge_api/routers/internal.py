@@ -54,6 +54,7 @@ async def replace_segments(
             duration_ms=segment.duration_ms,
             speaker_label=segment.speaker_label,
             text=segment.text,
+            translated_text=segment.translated_text,
         )
         for segment in payload
     )

@@ -4,9 +4,12 @@ import { Link, useParams } from "react-router-dom";
 import {
   getProject,
   retryJob,
+  updateSegment,
   uploadMedia,
   type MediaWithJob,
   type Project,
+  type Segment,
+  type SegmentUpdate,
 } from "../api/client";
 
 const POLL_INTERVAL_MS = 3000;
@@ -20,6 +23,152 @@ function formatTimestamp(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+interface SegmentDraft {
+  text: string;
+  translated_text: string;
+  start_ms: number;
+  end_ms: number;
+}
+
+function draftFrom(segment: Segment): SegmentDraft {
+  return {
+    text: segment.text,
+    translated_text: segment.translated_text ?? "",
+    start_ms: segment.start_ms,
+    end_ms: segment.end_ms,
+  };
+}
+
+function diffDraft(segment: Segment, draft: SegmentDraft): SegmentUpdate {
+  const patch: SegmentUpdate = {};
+  if (draft.text !== segment.text) patch.text = draft.text;
+  if (draft.translated_text !== (segment.translated_text ?? "")) {
+    patch.translated_text = draft.translated_text;
+  }
+  if (draft.start_ms !== segment.start_ms) patch.start_ms = draft.start_ms;
+  if (draft.end_ms !== segment.end_ms) patch.end_ms = draft.end_ms;
+  return patch;
+}
+
+function SegmentRow({
+  segment,
+  onSave,
+}: {
+  segment: Segment;
+  onSave: (segmentId: string, patch: SegmentUpdate) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<SegmentDraft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const isEditing = draft !== null;
+  const isDirty =
+    isEditing && Object.keys(diffDraft(segment, draft)).length > 0;
+  const isInvalid =
+    isEditing && (draft.start_ms < 0 || draft.start_ms >= draft.end_ms);
+
+  function startEditing() {
+    setDraft(draftFrom(segment));
+    setSaveError(null);
+  }
+
+  function cancelEditing() {
+    setDraft(null);
+    setSaveError(null);
+  }
+
+  async function handleSave() {
+    if (!draft || isInvalid) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(segment.id, diffDraft(segment, draft));
+      setDraft(null);
+    } catch (err) {
+      setSaveError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <li>
+      <strong>{segment.speaker_label}</strong>{" "}
+      <span>
+        [{formatTimestamp(segment.start_ms)}–{formatTimestamp(segment.end_ms)},
+        duration {formatTimestamp(segment.duration_ms)}]
+      </span>{" "}
+      {isDirty && <span role="status">Unsaved changes</span>}
+      {!isEditing ? (
+        <>
+          <div style={{ display: "flex", gap: "1rem" }}>
+            <p style={{ flex: 1 }}>{segment.text}</p>
+            <p style={{ flex: 1 }}>{segment.translated_text}</p>
+          </div>
+          <button type="button" onClick={startEditing}>
+            Edit
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: "1rem" }}>
+            <textarea
+              style={{ flex: 1 }}
+              value={draft.text}
+              onChange={(event) =>
+                setDraft({ ...draft, text: event.target.value })
+              }
+            />
+            <textarea
+              style={{ flex: 1 }}
+              value={draft.translated_text}
+              onChange={(event) =>
+                setDraft({ ...draft, translated_text: event.target.value })
+              }
+            />
+          </div>
+          <label>
+            Start (ms){" "}
+            <input
+              type="number"
+              value={draft.start_ms}
+              onChange={(event) =>
+                setDraft({ ...draft, start_ms: Number(event.target.value) })
+              }
+            />
+          </label>{" "}
+          <label>
+            End (ms){" "}
+            <input
+              type="number"
+              value={draft.end_ms}
+              onChange={(event) =>
+                setDraft({ ...draft, end_ms: Number(event.target.value) })
+              }
+            />
+          </label>
+          {isInvalid && (
+            <p role="alert">start must be 0 or greater and less than end</p>
+          )}
+          {saveError && <p role="alert">{saveError}</p>}
+          <div>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || isInvalid}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>{" "}
+            <button type="button" onClick={cancelEditing} disabled={saving}>
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+    </li>
+  );
 }
 
 export function ProjectDetailPage() {
@@ -84,6 +233,26 @@ export function ProjectDetailPage() {
     );
   }
 
+  async function handleSegmentSave(
+    mediaId: string,
+    segmentId: string,
+    patch: SegmentUpdate,
+  ) {
+    const updated = await updateSegment(segmentId, patch);
+    setMedia((current) =>
+      current.map((item) =>
+        item.media.id === mediaId
+          ? {
+              ...item,
+              segments: item.segments.map((s) =>
+                s.id === segmentId ? updated : s,
+              ),
+            }
+          : item,
+      ),
+    );
+  }
+
   return (
     <main>
       <p>
@@ -130,15 +299,13 @@ export function ProjectDetailPage() {
                 {item.segments.length > 0 && (
                   <ol>
                     {item.segments.map((segment) => (
-                      <li key={segment.index}>
-                        <strong>{segment.speaker_label}</strong>{" "}
-                        <span>
-                          [{formatTimestamp(segment.start_ms)}–
-                          {formatTimestamp(segment.end_ms)}, duration{" "}
-                          {formatTimestamp(segment.duration_ms)}]
-                        </span>
-                        <p>{segment.text}</p>
-                      </li>
+                      <SegmentRow
+                        key={segment.id}
+                        segment={segment}
+                        onSave={(segmentId, patch) =>
+                          handleSegmentSave(item.media.id, segmentId, patch)
+                        }
+                      />
                     ))}
                   </ol>
                 )}

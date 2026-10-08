@@ -17,8 +17,13 @@ from dubforge_contracts.models import (
 from dubforge_pipeline.audio import extract_audio
 from dubforge_pipeline.logging_config import configure_logging
 from dubforge_pipeline.providers.assemblyai import transcribe_with_diarization
-from dubforge_pipeline.providers.mock import MockDiarizationProvider, MockSTTProvider
-from dubforge_pipeline.segments import combine_segments
+from dubforge_pipeline.providers.base import TranslationProvider
+from dubforge_pipeline.providers.mock import (
+    MockDiarizationProvider,
+    MockSTTProvider,
+    MockTranslationProvider,
+)
+from dubforge_pipeline.segments import combine_segments, translate_segments
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +57,12 @@ def _get_transcription(audio_path: str) -> tuple[list[TranscriptSegment], list[S
     )
 
 
+def _get_translator() -> TranslationProvider:
+    # No real translation provider exists yet; wire one in here following
+    # the ASSEMBLYAI_API_KEY / _get_transcription pattern once one does.
+    return MockTranslationProvider()
+
+
 def _submit_segments(
     client: httpx.Client, api_base_url: str, media_id: str, segments: list[Segment]
 ) -> None:
@@ -76,6 +87,8 @@ def process_job(
         _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=70)
         transcripts, speakers = _get_transcription(output_path)
         segments = combine_segments(transcripts, speakers)
+        # Hardcoded placeholder languages until real config/UI exists.
+        segments = translate_segments(segments, _get_translator(), src_lang="en", tgt_lang="es")
 
         _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=90)
         _submit_segments(client, api_base_url, str(message.media_id), segments)

@@ -28,12 +28,21 @@ export interface Job {
 }
 
 export interface Segment {
+  id: string;
   index: number;
   start_ms: number;
   end_ms: number;
   duration_ms: number;
   speaker_label: string;
   text: string;
+  translated_text: string | null;
+}
+
+export interface SegmentUpdate {
+  text?: string;
+  translated_text?: string;
+  start_ms?: number;
+  end_ms?: number;
 }
 
 export interface MediaWithJob {
@@ -111,4 +120,14 @@ export function getJob(jobId: string): Promise<Job> {
 
 export function retryJob(jobId: string): Promise<Job> {
   return request<Job>(`/jobs/${jobId}/retry`, { method: "POST" });
+}
+
+export function updateSegment(
+  segmentId: string,
+  patch: SegmentUpdate,
+): Promise<Segment> {
+  return request<Segment>(`/segments/${segmentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
