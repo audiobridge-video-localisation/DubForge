@@ -75,6 +75,7 @@ def test_process_job_submits_segments(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert len(segment_calls) == 1
     assert segment_calls[0][0]["text"] == "Hi"
     assert segment_calls[0][0]["speaker_label"] == "A"
+    assert segment_calls[0][0]["translated_text"] == "[es] Hi"
 
 
 def test_process_job_reports_failure_on_exception(
