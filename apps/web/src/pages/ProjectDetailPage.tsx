@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
+  approveSegment,
   getProject,
+  markReadyForDubbing,
+  requestSegmentChanges,
   retryJob,
   updateSegment,
   uploadMedia,
@@ -11,6 +14,12 @@ import {
   type Segment,
   type SegmentUpdate,
 } from "../api/client";
+
+const REVIEW_STATUS_LABELS = {
+  pending: "Pending",
+  approved: "Approved",
+  needs_changes: "Needs changes",
+};
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -28,6 +37,7 @@ function formatTimestamp(ms: number): string {
 interface SegmentDraft {
   text: string;
   translated_text: string;
+  speaker_label: string;
   start_ms: number;
   end_ms: number;
 }
@@ -36,6 +46,7 @@ function draftFrom(segment: Segment): SegmentDraft {
   return {
     text: segment.text,
     translated_text: segment.translated_text ?? "",
+    speaker_label: segment.speaker_label,
     start_ms: segment.start_ms,
     end_ms: segment.end_ms,
   };
@@ -47,6 +58,9 @@ function diffDraft(segment: Segment, draft: SegmentDraft): SegmentUpdate {
   if (draft.translated_text !== (segment.translated_text ?? "")) {
     patch.translated_text = draft.translated_text;
   }
+  if (draft.speaker_label !== segment.speaker_label) {
+    patch.speaker_label = draft.speaker_label;
+  }
   if (draft.start_ms !== segment.start_ms) patch.start_ms = draft.start_ms;
   if (draft.end_ms !== segment.end_ms) patch.end_ms = draft.end_ms;
   return patch;
@@ -55,13 +69,20 @@ function diffDraft(segment: Segment, draft: SegmentDraft): SegmentUpdate {
 function SegmentRow({
   segment,
   onSave,
+  onApprove,
+  onRequestChanges,
 }: {
   segment: Segment;
   onSave: (segmentId: string, patch: SegmentUpdate) => Promise<void>;
+  onApprove: (segmentId: string) => Promise<void>;
+  onRequestChanges: (segmentId: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<SegmentDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [reviewActionError, setReviewActionError] = useState<string | null>(
+    null,
+  );
 
   const isEditing = draft !== null;
   const isDirty =
@@ -93,26 +114,63 @@ function SegmentRow({
     }
   }
 
+  async function handleApprove() {
+    setReviewActionError(null);
+    try {
+      await onApprove(segment.id);
+    } catch (err) {
+      setReviewActionError((err as Error).message);
+    }
+  }
+
+  async function handleRequestChanges() {
+    setReviewActionError(null);
+    try {
+      await onRequestChanges(segment.id);
+    } catch (err) {
+      setReviewActionError((err as Error).message);
+    }
+  }
+
   return (
     <li>
-      <strong>{segment.speaker_label}</strong>{" "}
+      <span>{REVIEW_STATUS_LABELS[segment.review_status]}</span>{" "}
       <span>
         [{formatTimestamp(segment.start_ms)}–{formatTimestamp(segment.end_ms)},
         duration {formatTimestamp(segment.duration_ms)}]
       </span>{" "}
       {isDirty && <span role="status">Unsaved changes</span>}
+      {reviewActionError && <p role="alert">{reviewActionError}</p>}
       {!isEditing ? (
         <>
+          <p>
+            <strong>{segment.speaker_label}</strong>
+          </p>
           <div style={{ display: "flex", gap: "1rem" }}>
             <p style={{ flex: 1 }}>{segment.text}</p>
             <p style={{ flex: 1 }}>{segment.translated_text}</p>
           </div>
           <button type="button" onClick={startEditing}>
             Edit
+          </button>{" "}
+          <button type="button" onClick={handleApprove}>
+            Approve
+          </button>{" "}
+          <button type="button" onClick={handleRequestChanges}>
+            Request changes
           </button>
         </>
       ) : (
         <>
+          <label>
+            Speaker{" "}
+            <input
+              value={draft.speaker_label}
+              onChange={(event) =>
+                setDraft({ ...draft, speaker_label: event.target.value })
+              }
+            />
+          </label>
           <div style={{ display: "flex", gap: "1rem" }}>
             <textarea
               style={{ flex: 1 }}
@@ -181,6 +239,10 @@ export function ProjectDetailPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  const [dubbingError, setDubbingError] = useState<
+    Record<string, string | null>
+  >({});
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -233,24 +295,65 @@ export function ProjectDetailPage() {
     );
   }
 
+  function applySegmentUpdate(
+    mediaId: string,
+    segmentId: string,
+    updated: Segment,
+  ) {
+    setMedia((current) =>
+      current.map((item) => {
+        if (item.media.id !== mediaId) return item;
+        const segments = item.segments.map((s) =>
+          s.id === segmentId ? updated : s,
+        );
+        return {
+          ...item,
+          segments,
+          approved_count: segments.filter((s) => s.review_status === "approved")
+            .length,
+          total_count: segments.length,
+        };
+      }),
+    );
+  }
+
   async function handleSegmentSave(
     mediaId: string,
     segmentId: string,
     patch: SegmentUpdate,
   ) {
     const updated = await updateSegment(segmentId, patch);
-    setMedia((current) =>
-      current.map((item) =>
-        item.media.id === mediaId
-          ? {
-              ...item,
-              segments: item.segments.map((s) =>
-                s.id === segmentId ? updated : s,
-              ),
-            }
-          : item,
-      ),
-    );
+    applySegmentUpdate(mediaId, segmentId, updated);
+  }
+
+  async function handleSegmentApprove(mediaId: string, segmentId: string) {
+    const updated = await approveSegment(segmentId);
+    applySegmentUpdate(mediaId, segmentId, updated);
+  }
+
+  async function handleSegmentRequestChanges(
+    mediaId: string,
+    segmentId: string,
+  ) {
+    const updated = await requestSegmentChanges(segmentId);
+    applySegmentUpdate(mediaId, segmentId, updated);
+  }
+
+  async function handleReadyForDubbing(mediaId: string) {
+    setDubbingError((current) => ({ ...current, [mediaId]: null }));
+    try {
+      const updatedMedia = await markReadyForDubbing(mediaId);
+      setMedia((current) =>
+        current.map((item) =>
+          item.media.id === mediaId ? { ...item, media: updatedMedia } : item,
+        ),
+      );
+    } catch (err) {
+      setDubbingError((current) => ({
+        ...current,
+        [mediaId]: (err as Error).message,
+      }));
+    }
   }
 
   return (
@@ -297,17 +400,48 @@ export function ProjectDetailPage() {
                   </>
                 )}
                 {item.segments.length > 0 && (
-                  <ol>
-                    {item.segments.map((segment) => (
-                      <SegmentRow
-                        key={segment.id}
-                        segment={segment}
-                        onSave={(segmentId, patch) =>
-                          handleSegmentSave(item.media.id, segmentId, patch)
-                        }
-                      />
-                    ))}
-                  </ol>
+                  <>
+                    <p>
+                      {item.approved_count} / {item.total_count} segments
+                      approved
+                    </p>
+                    <button
+                      type="button"
+                      disabled={
+                        item.media.ready_for_dubbing ||
+                        item.total_count === 0 ||
+                        item.approved_count !== item.total_count
+                      }
+                      onClick={() => handleReadyForDubbing(item.media.id)}
+                    >
+                      {item.media.ready_for_dubbing
+                        ? "Ready for dubbing"
+                        : "Mark ready for dubbing"}
+                    </button>
+                    {dubbingError[item.media.id] && (
+                      <p role="alert">{dubbingError[item.media.id]}</p>
+                    )}
+                    <ol>
+                      {item.segments.map((segment) => (
+                        <SegmentRow
+                          key={segment.id}
+                          segment={segment}
+                          onSave={(segmentId, patch) =>
+                            handleSegmentSave(item.media.id, segmentId, patch)
+                          }
+                          onApprove={(segmentId) =>
+                            handleSegmentApprove(item.media.id, segmentId)
+                          }
+                          onRequestChanges={(segmentId) =>
+                            handleSegmentRequestChanges(
+                              item.media.id,
+                              segmentId,
+                            )
+                          }
+                        />
+                      ))}
+                    </ol>
+                  </>
                 )}
               </li>
             ))}

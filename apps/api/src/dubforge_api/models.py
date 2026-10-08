@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dubforge_api.db import Base
-from dubforge_contracts.models import JobStatus
+from dubforge_contracts.models import JobStatus, SegmentReviewStatus
 
 
 class Project(Base):
@@ -30,6 +30,7 @@ class Media(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    ready_for_dubbing: Mapped[bool] = mapped_column(nullable=False, default=False)
 
     project: Mapped[Project] = relationship(back_populates="media")
     job: Mapped["Job | None"] = relationship(back_populates="media", uselist=False)
@@ -69,6 +70,9 @@ class Segment(Base):
     speaker_label: Mapped[str] = mapped_column(String(255), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     translated_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=SegmentReviewStatus.PENDING.value
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

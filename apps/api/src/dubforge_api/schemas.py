@@ -22,6 +22,8 @@ class MediaWithJob(BaseModel):
     media: MediaRead
     job: JobRead
     segments: list[Segment] = []
+    approved_count: int = 0
+    total_count: int = 0
 
 
 class ProjectDetailRead(ProjectRead):

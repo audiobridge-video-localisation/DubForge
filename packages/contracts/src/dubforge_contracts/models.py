@@ -30,6 +30,12 @@ class JobStatus(StrEnum):
     FAILED = "failed"
 
 
+class SegmentReviewStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    NEEDS_CHANGES = "needs_changes"
+
+
 class MediaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -38,6 +44,7 @@ class MediaRead(BaseModel):
     filename: str
     storage_path: str
     created_at: datetime
+    ready_for_dubbing: bool = False
 
 
 class JobRead(BaseModel):
@@ -87,6 +94,7 @@ class Segment(BaseModel):
     speaker_label: str
     text: str
     translated_text: str | None = None
+    review_status: SegmentReviewStatus = SegmentReviewStatus.PENDING
 
 
 class SegmentUpdate(BaseModel):
@@ -94,6 +102,7 @@ class SegmentUpdate(BaseModel):
 
     text: str | None = None
     translated_text: str | None = None
+    speaker_label: str | None = None
     start_ms: int | None = None
     end_ms: int | None = None
 
