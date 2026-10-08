@@ -9,6 +9,7 @@ dependencies = []
 dev = [
   "mypy>=1.15",
   "pre-commit>=4.1",
+  "psutil>=6.1",
   "pytest>=8.3",
   "pytest-asyncio>=0.25",
   "ruff>=0.9",
@@ -61,3 +62,7 @@ mypy_path = [
   "pipeline/src",
   "packages/contracts/src",
 ]
+
+[[tool.mypy.overrides]]
+module = "faster_whisper.*"
+ignore_missing_imports = true

@@ -36,6 +36,14 @@ class SegmentReviewStatus(StrEnum):
     NEEDS_CHANGES = "needs_changes"
 
 
+class ArtifactStatus(StrEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    OUTDATED = "outdated"
+
+
 class MediaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,6 +84,21 @@ class JobCallbackUpdate(BaseModel):
     error_message: str | None = None
 
 
+class Artifact(BaseModel):
+    """A dubbed-audio artifact generated for a single segment."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    status: ArtifactStatus = ArtifactStatus.PENDING
+    audio_path: str | None = None
+    duration_ms: int | None = None
+    error_message: str | None = None
+    retry_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
 class Segment(BaseModel):
     """An ordered, speaker-labeled transcript segment for a piece of media.
 
@@ -95,6 +118,7 @@ class Segment(BaseModel):
     text: str
     translated_text: str | None = None
     review_status: SegmentReviewStatus = SegmentReviewStatus.PENDING
+    artifact: Artifact | None = None
 
 
 class SegmentUpdate(BaseModel):
@@ -117,4 +141,22 @@ class SegmentUpdate(BaseModel):
         return self
 
 
+class ArtifactQueueMessage(BaseModel):
+    """Message pushed by the api and consumed by the pipeline worker."""
+
+    artifact_id: uuid.UUID
+    segment_id: uuid.UUID
+    text: str
+
+
+class ArtifactCallbackUpdate(BaseModel):
+    """Partial update the worker reports back to the api."""
+
+    status: ArtifactStatus
+    audio_path: str | None = None
+    duration_ms: int | None = None
+    error_message: str | None = None
+
+
 JOB_QUEUE_KEY = "dubforge:jobs"
+ARTIFACT_QUEUE_KEY = "dubforge:artifacts"

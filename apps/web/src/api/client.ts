@@ -30,6 +30,20 @@ export interface Job {
 
 export type SegmentReviewStatus = "pending" | "approved" | "needs_changes";
 
+export type ArtifactStatus =
+  "pending" | "processing" | "completed" | "failed" | "outdated";
+
+export interface Artifact {
+  id: string;
+  status: ArtifactStatus;
+  audio_path: string | null;
+  duration_ms: number | null;
+  error_message: string | null;
+  retry_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Segment {
   id: string;
   index: number;
@@ -40,6 +54,7 @@ export interface Segment {
   text: string;
   translated_text: string | null;
   review_status: SegmentReviewStatus;
+  artifact: Artifact | null;
 }
 
 export interface SegmentUpdate {
@@ -151,6 +166,12 @@ export function requestSegmentChanges(segmentId: string): Promise<Segment> {
 
 export function markReadyForDubbing(mediaId: string): Promise<Media> {
   return request<Media>(`/media/${mediaId}/ready-for-dubbing`, {
+    method: "POST",
+  });
+}
+
+export function regenerateSegment(segmentId: string): Promise<Artifact> {
+  return request<Artifact>(`/segments/${segmentId}/regenerate`, {
     method: "POST",
   });
 }
