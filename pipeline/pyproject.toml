@@ -11,6 +11,16 @@ dependencies = [
   "redis>=5.2",
 ]
 
+[project.optional-dependencies]
+tts-edge = [
+  "edge-tts>=7.2",
+]
+tts-mms = [
+  "transformers>=5.19",
+  "torch>=2.14",
+  "scipy>=1.18",
+]
+
 [project.scripts]
 dubforge-worker = "dubforge_pipeline.worker:run"
 

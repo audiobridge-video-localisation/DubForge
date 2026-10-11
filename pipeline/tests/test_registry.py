@@ -1,7 +1,9 @@
 import pytest
 
-from dubforge_pipeline.providers.mock import MockSTTProvider
-from dubforge_pipeline.providers.registry import get_stt_provider
+from dubforge_pipeline.providers.edge_tts import EdgeTTSProvider
+from dubforge_pipeline.providers.mms_tts import MMSTTSProvider
+from dubforge_pipeline.providers.mock import MockSTTProvider, MockTTSProvider
+from dubforge_pipeline.providers.registry import get_stt_provider, get_tts_provider
 from dubforge_pipeline.providers.whisper import WhisperSTTProvider
 
 
@@ -35,3 +37,33 @@ def test_unknown_provider_raises_value_error(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("STT_PROVIDER", "nonexistent")
     with pytest.raises(ValueError, match="nonexistent"):
         get_stt_provider()
+
+
+def test_default_tts_provider_is_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TTS_PROVIDER", raising=False)
+    provider = get_tts_provider()
+    assert isinstance(provider, MockTTSProvider)
+
+
+def test_tts_provider_edge(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TTS_PROVIDER", "edge")
+    provider = get_tts_provider()
+    assert isinstance(provider, EdgeTTSProvider)
+
+
+def test_tts_provider_mms(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TTS_PROVIDER", "mms")
+    provider = get_tts_provider()
+    assert isinstance(provider, MMSTTSProvider)
+
+
+def test_tts_provider_name_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TTS_PROVIDER", "EDGE")
+    provider = get_tts_provider()
+    assert isinstance(provider, EdgeTTSProvider)
+
+
+def test_unknown_tts_provider_raises_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TTS_PROVIDER", "nonexistent")
+    with pytest.raises(ValueError, match="nonexistent"):
+        get_tts_provider()
