@@ -68,5 +68,5 @@ module = "faster_whisper.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["transformers.*", "torch.*", "sentencepiece.*"]
+module = ["edge_tts.*", "scipy.*", "transformers.*", "torch.*", "sentencepiece.*"]
 ignore_missing_imports = true
