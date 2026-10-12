@@ -11,6 +11,13 @@ dependencies = [
   "redis>=5.2",
 ]
 
+[project.optional-dependencies]
+nllb = [
+  "transformers>=5.19",
+  "torch>=2.14",
+  "sentencepiece>=0.2.2",
+]
+
 [project.scripts]
 dubforge-worker = "dubforge_pipeline.worker:run"
 

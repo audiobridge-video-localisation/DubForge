@@ -66,3 +66,7 @@ mypy_path = [
 [[tool.mypy.overrides]]
 module = "faster_whisper.*"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["transformers.*", "torch.*", "sentencepiece.*"]
+ignore_missing_imports = true
