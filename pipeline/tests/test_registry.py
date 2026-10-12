@@ -2,8 +2,17 @@ import pytest
 
 from dubforge_pipeline.providers.edge_tts import EdgeTTSProvider
 from dubforge_pipeline.providers.mms_tts import MMSTTSProvider
-from dubforge_pipeline.providers.mock import MockSTTProvider, MockTTSProvider
-from dubforge_pipeline.providers.registry import get_stt_provider, get_tts_provider
+from dubforge_pipeline.providers.mock import (
+    MockSTTProvider,
+    MockTranslationProvider,
+    MockTTSProvider,
+)
+from dubforge_pipeline.providers.nllb import NLLBTranslationProvider
+from dubforge_pipeline.providers.registry import (
+    get_stt_provider,
+    get_translation_provider,
+    get_tts_provider,
+)
 from dubforge_pipeline.providers.whisper import WhisperSTTProvider
 
 
@@ -67,3 +76,27 @@ def test_unknown_tts_provider_raises_value_error(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("TTS_PROVIDER", "nonexistent")
     with pytest.raises(ValueError, match="nonexistent"):
         get_tts_provider()
+
+
+def test_default_translation_provider_is_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TRANSLATION_PROVIDER", raising=False)
+    provider = get_translation_provider()
+    assert isinstance(provider, MockTranslationProvider)
+
+
+def test_translation_provider_nllb(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRANSLATION_PROVIDER", "nllb")
+    provider = get_translation_provider()
+    assert isinstance(provider, NLLBTranslationProvider)
+
+
+def test_translation_provider_name_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRANSLATION_PROVIDER", "NLLB")
+    provider = get_translation_provider()
+    assert isinstance(provider, NLLBTranslationProvider)
+
+
+def test_unknown_translation_provider_raises_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRANSLATION_PROVIDER", "nonexistent")
+    with pytest.raises(ValueError, match="nonexistent"):
+        get_translation_provider()

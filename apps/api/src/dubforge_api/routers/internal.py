@@ -11,9 +11,17 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dubforge_api.db import get_db
-from dubforge_api.models import Job, Media
+from dubforge_api.models import Artifact, Job, Media
 from dubforge_api.models import Segment as SegmentModel
-from dubforge_contracts.models import JobCallbackUpdate, JobRead, Segment
+from dubforge_contracts.models import (
+    Artifact as ArtifactContract,
+)
+from dubforge_contracts.models import (
+    ArtifactCallbackUpdate,
+    JobCallbackUpdate,
+    JobRead,
+    Segment,
+)
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -54,8 +62,29 @@ async def replace_segments(
             duration_ms=segment.duration_ms,
             speaker_label=segment.speaker_label,
             text=segment.text,
+            translated_text=segment.translated_text,
         )
         for segment in payload
     )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/artifacts/{artifact_id}", response_model=ArtifactContract)
+async def update_artifact(
+    artifact_id: uuid.UUID, payload: ArtifactCallbackUpdate, db: AsyncSession = Depends(get_db)
+) -> Artifact:
+    artifact = await db.get(Artifact, artifact_id)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    artifact.status = payload.status.value
+    if payload.audio_path is not None:
+        artifact.audio_path = payload.audio_path
+    if payload.duration_ms is not None:
+        artifact.duration_ms = payload.duration_ms
+    if payload.error_message is not None:
+        artifact.error_message = payload.error_message[:2000]
+    await db.commit()
+    await db.refresh(artifact, attribute_names=["updated_at"])
+    return artifact

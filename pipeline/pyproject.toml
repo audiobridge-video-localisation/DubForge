@@ -12,6 +12,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+nllb = [
+  "transformers>=5.19",
+  "torch>=2.14",
+  "sentencepiece>=0.2.2",
+]
 tts-edge = [
   "edge-tts>=7.2",
 ]
