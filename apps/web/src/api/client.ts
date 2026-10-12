@@ -14,6 +14,7 @@ export interface Media {
   filename: string;
   storage_path: string;
   created_at: string;
+  ready_for_dubbing: boolean;
 }
 
 export interface Job {
@@ -27,19 +28,49 @@ export interface Job {
   updated_at: string;
 }
 
+export type SegmentReviewStatus = "pending" | "approved" | "needs_changes";
+
+export type ArtifactStatus =
+  "pending" | "processing" | "completed" | "failed" | "outdated";
+
+export interface Artifact {
+  id: string;
+  status: ArtifactStatus;
+  audio_path: string | null;
+  duration_ms: number | null;
+  error_message: string | null;
+  retry_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Segment {
+  id: string;
   index: number;
   start_ms: number;
   end_ms: number;
   duration_ms: number;
   speaker_label: string;
   text: string;
+  translated_text: string | null;
+  review_status: SegmentReviewStatus;
+  artifact: Artifact | null;
+}
+
+export interface SegmentUpdate {
+  text?: string;
+  translated_text?: string;
+  speaker_label?: string;
+  start_ms?: number;
+  end_ms?: number;
 }
 
 export interface MediaWithJob {
   media: Media;
   job: Job;
   segments: Segment[];
+  approved_count: number;
+  total_count: number;
 }
 
 export interface ProjectDetail extends Project {
@@ -111,4 +142,36 @@ export function getJob(jobId: string): Promise<Job> {
 
 export function retryJob(jobId: string): Promise<Job> {
   return request<Job>(`/jobs/${jobId}/retry`, { method: "POST" });
+}
+
+export function updateSegment(
+  segmentId: string,
+  patch: SegmentUpdate,
+): Promise<Segment> {
+  return request<Segment>(`/segments/${segmentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function approveSegment(segmentId: string): Promise<Segment> {
+  return request<Segment>(`/segments/${segmentId}/approve`, { method: "POST" });
+}
+
+export function requestSegmentChanges(segmentId: string): Promise<Segment> {
+  return request<Segment>(`/segments/${segmentId}/request-changes`, {
+    method: "POST",
+  });
+}
+
+export function markReadyForDubbing(mediaId: string): Promise<Media> {
+  return request<Media>(`/media/${mediaId}/ready-for-dubbing`, {
+    method: "POST",
+  });
+}
+
+export function regenerateSegment(segmentId: string): Promise<Artifact> {
+  return request<Artifact>(`/segments/${segmentId}/regenerate`, {
+    method: "POST",
+  });
 }

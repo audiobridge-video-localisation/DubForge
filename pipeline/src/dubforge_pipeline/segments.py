@@ -1,4 +1,5 @@
 from dubforge_contracts.models import Segment, SpeakerSegment, TranscriptSegment
+from dubforge_pipeline.providers.base import TranslationProvider
 
 UNKNOWN_SPEAKER = "Unknown"
 
@@ -35,4 +36,16 @@ def combine_segments(
             text=transcript.text,
         )
         for index, transcript in enumerate(ordered)
+    ]
+
+
+def translate_segments(
+    segments: list[Segment], provider: TranslationProvider, src_lang: str, tgt_lang: str
+) -> list[Segment]:
+    """Attach a translated_text to each segment via the given provider."""
+    return [
+        segment.model_copy(
+            update={"translated_text": provider.translate(segment.text, src_lang, tgt_lang)}
+        )
+        for segment in segments
     ]
