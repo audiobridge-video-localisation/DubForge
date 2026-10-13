@@ -44,6 +44,21 @@ class ArtifactStatus(StrEnum):
     OUTDATED = "outdated"
 
 
+class SegmentAudioStatus(StrEnum):
+    """Derived, user-facing answer to "is this segment's audio usable?"."""
+
+    NO_AUDIO = "no_audio"
+    PENDING = "pending"
+    FAILED = "failed"
+    OUTDATED = "outdated"
+    MISMATCH = "mismatch"
+    READY = "ready"
+
+
+AUDIO_MISMATCH_ABS_TOLERANCE_MS = 300
+AUDIO_MISMATCH_REL_TOLERANCE = 0.15
+
+
 class MediaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,6 +114,30 @@ class Artifact(BaseModel):
     updated_at: datetime
 
 
+def compute_audio_status(segment_duration_ms: int, artifact: Artifact | None) -> SegmentAudioStatus:
+    """Derive a single usable-audio status from a segment's expected
+    duration and its (possibly absent) dubbed-audio artifact."""
+
+    if artifact is None:
+        return SegmentAudioStatus.NO_AUDIO
+    if artifact.status in (ArtifactStatus.PENDING, ArtifactStatus.PROCESSING):
+        return SegmentAudioStatus.PENDING
+    if artifact.status == ArtifactStatus.FAILED:
+        return SegmentAudioStatus.FAILED
+    if artifact.status == ArtifactStatus.OUTDATED:
+        return SegmentAudioStatus.OUTDATED
+
+    # COMPLETED: compare actual vs expected duration against tolerance.
+    if artifact.duration_ms is None:
+        return SegmentAudioStatus.MISMATCH
+    tolerance_ms = max(
+        AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * segment_duration_ms
+    )
+    if abs(artifact.duration_ms - segment_duration_ms) > tolerance_ms:
+        return SegmentAudioStatus.MISMATCH
+    return SegmentAudioStatus.READY
+
+
 class Segment(BaseModel):
     """An ordered, speaker-labeled transcript segment for a piece of media.
 
@@ -119,6 +158,7 @@ class Segment(BaseModel):
     translated_text: str | None = None
     review_status: SegmentReviewStatus = SegmentReviewStatus.PENDING
     artifact: Artifact | None = None
+    audio_status: SegmentAudioStatus = SegmentAudioStatus.NO_AUDIO
 
 
 class SegmentUpdate(BaseModel):

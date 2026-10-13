@@ -15,7 +15,7 @@ from dubforge_api.schemas import (
     ProjectRead,
     segment_to_contract,
 )
-from dubforge_contracts.models import JobRead, MediaRead, SegmentReviewStatus
+from dubforge_contracts.models import JobRead, MediaRead, SegmentAudioStatus, SegmentReviewStatus
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -59,21 +59,27 @@ async def get_project(
     # relationship — see segments.py's _get_artifact_for_segment for why.
     artifact_by_segment_id = {a.segment_id: a for a in artifacts_result.scalars()}
 
-    media = [
-        MediaWithJob(
-            media=MediaRead.model_validate(item),
-            job=JobRead.model_validate(item.job),
-            segments=[
-                segment_to_contract(s, artifact_by_segment_id.get(s.id)) for s in item.segments
-            ],
-            approved_count=sum(
-                1 for s in item.segments if s.review_status == SegmentReviewStatus.APPROVED.value
-            ),
-            total_count=len(item.segments),
+    media = []
+    for item in project.media:
+        if item.job is None:
+            continue
+        segments = [segment_to_contract(s, artifact_by_segment_id.get(s.id)) for s in item.segments]
+        media.append(
+            MediaWithJob(
+                media=MediaRead.model_validate(item),
+                job=JobRead.model_validate(item.job),
+                segments=segments,
+                approved_count=sum(
+                    1
+                    for s in item.segments
+                    if s.review_status == SegmentReviewStatus.APPROVED.value
+                ),
+                total_count=len(item.segments),
+                usable_audio_count=sum(
+                    1 for s in segments if s.audio_status == SegmentAudioStatus.READY
+                ),
+            )
         )
-        for item in project.media
-        if item.job is not None
-    ]
     return ProjectDetailRead(
         id=project.id, name=project.name, created_at=project.created_at, media=media
     )

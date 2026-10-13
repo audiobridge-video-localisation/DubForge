@@ -14,6 +14,7 @@ import {
   type MediaWithJob,
   type Project,
   type Segment,
+  type SegmentAudioStatus,
   type SegmentUpdate,
 } from "../api/client";
 
@@ -23,16 +24,21 @@ const REVIEW_STATUS_LABELS = {
   needs_changes: "Needs changes",
 };
 
-const ARTIFACT_STATUS_LABELS = {
-  pending: "Pending",
-  processing: "Processing",
-  completed: "Completed",
-  failed: "Failed",
+const AUDIO_STATUS_LABELS: Record<SegmentAudioStatus, string> = {
+  no_audio: "No audio yet",
+  pending: "Generating…",
+  failed: "Generation failed",
   outdated: "Outdated",
+  mismatch: "Duration mismatch",
+  ready: "Usable",
 };
 
 function isArtifactInFlight(artifact: Artifact | null): boolean {
   return artifact?.status === "pending" || artifact?.status === "processing";
+}
+
+function isAudioProblem(status: SegmentAudioStatus): boolean {
+  return status === "failed" || status === "mismatch" || status === "outdated";
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -192,14 +198,26 @@ function SegmentRow({
           >
             Regenerate
           </button>
-          <p>
-            Artifact:{" "}
-            {segment.artifact
-              ? ARTIFACT_STATUS_LABELS[segment.artifact.status]
-              : "None yet"}
+          <p
+            role={isAudioProblem(segment.audio_status) ? "alert" : undefined}
+            style={
+              isAudioProblem(segment.audio_status)
+                ? {
+                    border: "1px solid #c00",
+                    background: "#fee",
+                    padding: "0.25rem 0.5rem",
+                  }
+                : undefined
+            }
+          >
+            Audio: {AUDIO_STATUS_LABELS[segment.audio_status]}
             {segment.artifact?.audio_path &&
               ` (${segment.artifact.audio_path})`}
-            {segment.artifact?.duration_ms != null &&
+            {segment.audio_status === "mismatch" &&
+              segment.artifact?.duration_ms != null &&
+              ` — expected ${segment.duration_ms}ms, got ${segment.artifact.duration_ms}ms`}
+            {segment.audio_status !== "mismatch" &&
+              segment.artifact?.duration_ms != null &&
               `, ${segment.artifact.duration_ms}ms`}
           </p>
           {segment.artifact?.status === "failed" &&
@@ -291,6 +309,13 @@ export function ProjectDetailPage() {
     Record<string, string | null>
   >({});
 
+  const [batchRegenerating, setBatchRegenerating] = useState<
+    Record<string, boolean>
+  >({});
+  const [batchRegenerateError, setBatchRegenerateError] = useState<
+    Record<string, string | null>
+  >({});
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -365,6 +390,8 @@ export function ProjectDetailPage() {
           approved_count: segments.filter((s) => s.review_status === "approved")
             .length,
           total_count: segments.length,
+          usable_audio_count: segments.filter((s) => s.audio_status === "ready")
+            .length,
         };
       }),
     );
@@ -392,19 +419,62 @@ export function ProjectDetailPage() {
     applySegmentUpdate(mediaId, segmentId, updated);
   }
 
-  async function handleSegmentRegenerate(mediaId: string, segmentId: string) {
-    const artifact = await regenerateSegment(segmentId);
+  function applySegmentArtifact(
+    mediaId: string,
+    segmentId: string,
+    artifact: Artifact,
+  ) {
+    // regenerateSegment always resets the artifact to "pending", so the
+    // segment's derived audio_status is known immediately without waiting
+    // for the next poll to refetch the full, server-computed value.
     setMedia((current) =>
       current.map((item) => {
         if (item.media.id !== mediaId) return item;
+        const segments = item.segments.map((s) =>
+          s.id === segmentId
+            ? { ...s, artifact, audio_status: "pending" as const }
+            : s,
+        );
         return {
           ...item,
-          segments: item.segments.map((s) =>
-            s.id === segmentId ? { ...s, artifact } : s,
-          ),
+          segments,
+          usable_audio_count: segments.filter((s) => s.audio_status === "ready")
+            .length,
         };
       }),
     );
+  }
+
+  async function handleSegmentRegenerate(mediaId: string, segmentId: string) {
+    const artifact = await regenerateSegment(segmentId);
+    applySegmentArtifact(mediaId, segmentId, artifact);
+  }
+
+  async function handleRegenerateProblemAudio(
+    mediaId: string,
+    segmentIds: string[],
+  ) {
+    setBatchRegenerateError((current) => ({ ...current, [mediaId]: null }));
+    setBatchRegenerating((current) => ({ ...current, [mediaId]: true }));
+    try {
+      const results = await Promise.allSettled(
+        segmentIds.map((segmentId) => regenerateSegment(segmentId)),
+      );
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          applySegmentArtifact(mediaId, segmentIds[index], result.value);
+        }
+      });
+      const failures = results.filter((r) => r.status === "rejected");
+      if (failures.length > 0) {
+        setBatchRegenerateError((current) => ({
+          ...current,
+          [mediaId]: `${failures.length} of ${segmentIds.length} segments failed to queue for regeneration`,
+        }));
+      }
+    } finally {
+      setBatchRegenerating((current) => ({ ...current, [mediaId]: false }));
+    }
   }
 
   async function handleReadyForDubbing(mediaId: string) {
@@ -473,6 +543,40 @@ export function ProjectDetailPage() {
                       {item.approved_count} / {item.total_count} segments
                       approved
                     </p>
+                    <p>
+                      {item.usable_audio_count} / {item.total_count} segments
+                      have usable audio
+                    </p>
+                    {(() => {
+                      const problemSegmentIds = item.segments
+                        .filter((s) => isAudioProblem(s.audio_status))
+                        .map((s) => s.id);
+                      return (
+                        problemSegmentIds.length > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={batchRegenerating[item.media.id]}
+                              onClick={() =>
+                                handleRegenerateProblemAudio(
+                                  item.media.id,
+                                  problemSegmentIds,
+                                )
+                              }
+                            >
+                              {batchRegenerating[item.media.id]
+                                ? "Regenerating…"
+                                : `Regenerate problem audio (${problemSegmentIds.length})`}
+                            </button>
+                            {batchRegenerateError[item.media.id] && (
+                              <p role="alert">
+                                {batchRegenerateError[item.media.id]}
+                              </p>
+                            )}
+                          </>
+                        )
+                      );
+                    })()}
                     <button
                       type="button"
                       disabled={
