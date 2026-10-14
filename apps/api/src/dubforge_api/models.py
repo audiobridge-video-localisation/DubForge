@@ -92,6 +92,7 @@ class Artifact(Base):
     )
     audio_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(nullable=True)
+    voice_profile: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     retry_count: Mapped[int] = mapped_column(nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
@@ -100,3 +101,24 @@ class Artifact(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class ExportJob(Base):
+    __tablename__ = "export_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    media_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("media.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=JobStatus.PENDING.value)
+    progress: Mapped[int] = mapped_column(nullable=False, default=0)
+    output_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    retry_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    media: Mapped[Media] = relationship()

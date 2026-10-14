@@ -99,6 +99,24 @@ async def test_internal_update_artifact(client: AsyncClient) -> None:
     assert body["duration_ms"] == 2000
 
 
+async def test_internal_update_artifact_persists_voice_profile(client: AsyncClient) -> None:
+    segment = await _seed_segment(client)
+    artifact_id = (await client.post(f"/segments/{segment['id']}/regenerate")).json()["id"]
+
+    response = await client.patch(
+        f"/internal/artifacts/{artifact_id}",
+        json={
+            "status": "completed",
+            "audio_path": "/tmp/dub.wav",
+            "duration_ms": 2000,
+            "voice_profile": "en-US-GuyNeural",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["voice_profile"] == "en-US-GuyNeural"
+
+
 async def test_internal_update_artifact_not_found(client: AsyncClient) -> None:
     response = await client.patch(
         f"/internal/artifacts/{uuid.uuid4()}", json={"status": "completed"}

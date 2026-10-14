@@ -1,3 +1,7 @@
+import os
+import tempfile
+import wave
+
 from dubforge_contracts.models import AudioResult, SpeakerSegment, TranscriptSegment
 
 from .base import DiarizationProvider, STTProvider, TranslationProvider, TTSProvider
@@ -31,4 +35,22 @@ class MockTTSProvider(TTSProvider):
         self, text: str, voice_profile: str, target_duration_ms: int | None = None
     ) -> AudioResult:
         actual_duration_ms = target_duration_ms if target_duration_ms is not None else 2000
-        return AudioResult(audio_path="/tmp/mock_audio.wav", actual_duration_ms=actual_duration_ms)
+        audio_path = self._write_silent_wav(actual_duration_ms)
+        return AudioResult(audio_path=audio_path, actual_duration_ms=actual_duration_ms)
+
+    @staticmethod
+    def _write_silent_wav(duration_ms: int, sample_rate: int = 16000) -> str:
+        # Real providers write real bytes; the mock used to just fabricate a
+        # path that was never created, which made downstream code (artifact
+        # persistence, export assembly) silently operate on a nonexistent
+        # file. Writing an actual silent WAV keeps the mock provider a
+        # faithful stand-in for the real ones.
+        num_samples = int(sample_rate * duration_ms / 1000)
+        fd, path = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        with wave.open(path, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(b"\x00\x00" * num_samples)
+        return path

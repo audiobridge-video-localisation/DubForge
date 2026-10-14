@@ -108,6 +108,7 @@ class Artifact(BaseModel):
     status: ArtifactStatus = ArtifactStatus.PENDING
     audio_path: str | None = None
     duration_ms: int | None = None
+    voice_profile: str | None = None
     error_message: str | None = None
     retry_count: int = 0
     created_at: datetime
@@ -195,8 +196,48 @@ class ArtifactCallbackUpdate(BaseModel):
     status: ArtifactStatus
     audio_path: str | None = None
     duration_ms: int | None = None
+    voice_profile: str | None = None
+    error_message: str | None = None
+
+
+class ExportKind(StrEnum):
+    MP3 = "mp3"
+    MP4 = "mp4"
+
+
+class ExportJobRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    media_id: uuid.UUID
+    kind: ExportKind
+    status: JobStatus
+    progress: int
+    output_path: str | None
+    error_message: str | None
+    retry_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExportJobQueueMessage(BaseModel):
+    """Message pushed by the api and consumed by the pipeline worker."""
+
+    export_job_id: uuid.UUID
+    media_id: uuid.UUID
+    kind: ExportKind
+    media_storage_path: str
+
+
+class ExportJobCallbackUpdate(BaseModel):
+    """Partial update the worker reports back to the api."""
+
+    status: JobStatus
+    progress: int | None = None
+    output_path: str | None = None
     error_message: str | None = None
 
 
 JOB_QUEUE_KEY = "dubforge:jobs"
 ARTIFACT_QUEUE_KEY = "dubforge:artifacts"
+EXPORT_QUEUE_KEY = "dubforge:exports"
