@@ -33,6 +33,9 @@ export type SegmentReviewStatus = "pending" | "approved" | "needs_changes";
 export type ArtifactStatus =
   "pending" | "processing" | "completed" | "failed" | "outdated";
 
+export type SegmentAudioStatus =
+  "no_audio" | "pending" | "failed" | "outdated" | "mismatch" | "ready";
+
 export interface Artifact {
   id: string;
   status: ArtifactStatus;
@@ -55,6 +58,7 @@ export interface Segment {
   translated_text: string | null;
   review_status: SegmentReviewStatus;
   artifact: Artifact | null;
+  audio_status: SegmentAudioStatus;
 }
 
 export interface SegmentUpdate {
@@ -71,6 +75,7 @@ export interface MediaWithJob {
   segments: Segment[];
   approved_count: number;
   total_count: number;
+  usable_audio_count: number;
 }
 
 export interface ProjectDetail extends Project {

@@ -5,7 +5,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from dubforge_api.models import Artifact as ArtifactModel
 from dubforge_api.models import Segment as SegmentModel
-from dubforge_contracts.models import Artifact, JobRead, MediaRead, Segment, SegmentReviewStatus
+from dubforge_contracts.models import (
+    Artifact,
+    JobRead,
+    MediaRead,
+    Segment,
+    SegmentReviewStatus,
+    compute_audio_status,
+)
 
 
 class ProjectCreate(BaseModel):
@@ -26,6 +33,7 @@ class MediaWithJob(BaseModel):
     segments: list[Segment] = []
     approved_count: int = 0
     total_count: int = 0
+    usable_audio_count: int = 0
 
 
 class ProjectDetailRead(ProjectRead):
@@ -39,6 +47,7 @@ def segment_to_contract(segment: SegmentModel, artifact: ArtifactModel | None) -
     # error during Pydantic validation. Querying the artifact directly by
     # its segment_id FK, then passing it in here, avoids the relationship
     # entirely.
+    artifact_contract = Artifact.model_validate(artifact) if artifact else None
     return Segment(
         id=segment.id,
         index=segment.index,
@@ -49,5 +58,6 @@ def segment_to_contract(segment: SegmentModel, artifact: ArtifactModel | None) -
         text=segment.text,
         translated_text=segment.translated_text,
         review_status=SegmentReviewStatus(segment.review_status),
-        artifact=Artifact.model_validate(artifact) if artifact else None,
+        artifact=artifact_contract,
+        audio_status=compute_audio_status(segment.duration_ms, artifact_contract),
     )
