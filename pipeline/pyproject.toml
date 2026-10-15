@@ -18,7 +18,7 @@ nllb = [
   "sentencepiece>=0.2.2",
 ]
 tts-edge = [
-  "edge-tts>=7.2",
+  "edge-tts>=7.3.1",
 ]
 tts-mms = [
   "transformers>=5.19",
