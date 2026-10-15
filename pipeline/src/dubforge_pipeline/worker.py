@@ -34,18 +34,22 @@ from dubforge_pipeline.export_assembly import (
 from dubforge_pipeline.logging_config import configure_logging
 from dubforge_pipeline.providers.assemblyai import transcribe_with_diarization
 from dubforge_pipeline.providers.base import TranslationProvider, TTSProvider
-from dubforge_pipeline.providers.mock import (
-    MockDiarizationProvider,
-    MockTranslationProvider,
-    MockTTSProvider,
+from dubforge_pipeline.providers.mock import MockDiarizationProvider
+from dubforge_pipeline.providers.registry import (
+    get_stt_provider,
+    get_translation_provider,
+    get_tts_provider,
 )
-from dubforge_pipeline.providers.registry import get_stt_provider
 from dubforge_pipeline.segments import combine_segments, translate_segments
+from dubforge_pipeline.timing import merge_short_segments
 
 logger = logging.getLogger(__name__)
 
 _ARTIFACTS_SUBDIR = "artifacts"
 _EXPORTS_SUBDIR = "exports"
+
+_translator_cache: TranslationProvider | None = None
+_tts_provider_cache: TTSProvider | None = None
 
 
 def _report(
@@ -81,15 +85,66 @@ def _get_transcription(audio_path: str) -> tuple[list[TranscriptSegment], list[S
 
 
 def _get_translator() -> TranslationProvider:
-    # No real translation provider exists yet; wire one in here following
-    # the ASSEMBLYAI_API_KEY / _get_transcription pattern once one does.
-    return MockTranslationProvider()
+    # Heavy models (e.g. NLLB) are loaded on first use by the provider
+    # itself; cache the provider instance so that load happens once per
+    # worker process rather than once per job.
+    global _translator_cache
+    if _translator_cache is None:
+        _translator_cache = get_translation_provider()
+    return _translator_cache
 
 
 def _get_tts_provider() -> TTSProvider:
-    # No real TTS provider exists yet; wire one in here following the
-    # ASSEMBLYAI_API_KEY / _get_transcription pattern once one does.
-    return MockTTSProvider()
+    # Same rationale as _get_translator: cache so heavy models (e.g. MMS)
+    # load once per worker process rather than once per artifact.
+    global _tts_provider_cache
+    if _tts_provider_cache is None:
+        _tts_provider_cache = get_tts_provider()
+    return _tts_provider_cache
+
+
+def reset_provider_cache() -> None:
+    """Test hook: clear cached providers so tests can swap env/providers freely."""
+    global _translator_cache, _tts_provider_cache
+    _translator_cache = None
+    _tts_provider_cache = None
+
+
+def _get_target_lang() -> str:
+    raw = os.environ.get("TARGET_LANGS", "hi")
+    langs = [lang.strip() for lang in raw.split(",") if lang.strip()]
+    if not langs:
+        langs = ["hi"]
+    if len(langs) > 1:
+        logger.warning(
+            "TARGET_LANGS=%s configures multiple languages, but each segment stores a "
+            "single translated_text; only using the first language: %s",
+            raw,
+            langs[0],
+        )
+    return langs[0]
+
+
+def _persist_artifact_audio(audio_path: str, storage_root: str, artifact_id: str) -> str:
+    """Move a TTS provider's output into the shared storage volume so the
+    api process (and later, export assembly) can find it after this
+    container exits. Returns a path relative to storage_root, mirroring
+    Media.storage_path's convention.
+
+    Raises if the source file doesn't exist: every provider, including the
+    mock, is expected to actually write real bytes (see providers/mock.py),
+    so a missing file here means something upstream is broken, not a
+    provider-specific quirk to silently paper over.
+    """
+    source = Path(audio_path)
+    if not source.exists():
+        raise RuntimeError(f"TTS provider reported audio_path={audio_path!r} but it does not exist")
+    artifacts_dir = Path(storage_root) / _ARTIFACTS_SUBDIR
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    suffix = source.suffix or ".wav"
+    destination = artifacts_dir / f"{artifact_id}{suffix}"
+    shutil.move(str(source), str(destination))
+    return str(destination.relative_to(Path(storage_root)))
 
 
 def _submit_segments(
@@ -129,22 +184,6 @@ def _report_artifact(
         logger.exception("Failed to report status for artifact %s", artifact_id)
 
 
-def _persist_artifact_audio(audio_path: str, storage_root: str, artifact_id: str) -> str:
-    """Move a TTS provider's output into the shared storage volume so the
-    api process (and later, export assembly) can find it after this
-    container exits. Returns a path relative to storage_root, mirroring
-    Media.storage_path's convention."""
-    source = Path(audio_path)
-    if not source.exists():
-        raise RuntimeError(f"TTS provider reported audio_path={audio_path!r} but it does not exist")
-    artifacts_dir = Path(storage_root) / _ARTIFACTS_SUBDIR
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
-    suffix = source.suffix or ".wav"
-    destination = artifacts_dir / f"{artifact_id}{suffix}"
-    shutil.move(str(source), str(destination))
-    return str(destination.relative_to(Path(storage_root)))
-
-
 def process_job(
     client: httpx.Client, api_base_url: str, storage_root: str, message: JobQueueMessage
 ) -> None:
@@ -158,9 +197,23 @@ def process_job(
 
         _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=70)
         transcripts, speakers = _get_transcription(output_path)
-        segments = combine_segments(transcripts, speakers)
-        # Hardcoded placeholder languages until real config/UI exists.
-        segments = translate_segments(segments, _get_translator(), src_lang="en", tgt_lang="es")
+
+        min_segment_ms = int(os.environ.get("MIN_SEGMENT_MS", "500"))
+        merged_transcripts = merge_short_segments(transcripts, min_duration_ms=min_segment_ms)
+        logger.info(
+            "Job %s: merged %d transcript segments into %d (min_duration_ms=%d)",
+            job_id,
+            len(transcripts),
+            len(merged_transcripts),
+            min_segment_ms,
+        )
+
+        segments = combine_segments(merged_transcripts, speakers)
+        src_lang = os.environ.get("SOURCE_LANG", "en")
+        tgt_lang = _get_target_lang()
+        segments = translate_segments(
+            segments, _get_translator(), src_lang=src_lang, tgt_lang=tgt_lang
+        )
 
         _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=90)
         _submit_segments(client, api_base_url, str(message.media_id), segments)
@@ -176,9 +229,16 @@ def process_artifact(
 ) -> None:
     artifact_id = str(message.artifact_id)
     _report_artifact(client, api_base_url, artifact_id, ArtifactStatus.PROCESSING)
+
+    if not message.text.strip():
+        logger.warning("Artifact %s has empty text; skipping synthesis", artifact_id)
+        _report_artifact(
+            client, api_base_url, artifact_id, ArtifactStatus.FAILED, error_message="empty text"
+        )
+        return
+
     try:
-        # No voice-selection UI/config exists yet; hardcoded placeholder.
-        voice_profile = "default"
+        voice_profile = _get_target_lang()
         result = _get_tts_provider().synthesize(message.text, voice_profile=voice_profile)
         relative_audio_path = _persist_artifact_audio(result.audio_path, storage_root, artifact_id)
     except Exception as exc:  # defensive: never let a bad artifact crash the worker loop
