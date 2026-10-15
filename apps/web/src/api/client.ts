@@ -41,6 +41,7 @@ export interface Artifact {
   status: ArtifactStatus;
   audio_path: string | null;
   duration_ms: number | null;
+  voice_profile: string | null;
   error_message: string | null;
   retry_count: number;
   created_at: string;
@@ -80,6 +81,21 @@ export interface MediaWithJob {
 
 export interface ProjectDetail extends Project {
   media: MediaWithJob[];
+}
+
+export type ExportKind = "mp3" | "mp4";
+
+export interface ExportJob {
+  id: string;
+  media_id: string;
+  kind: ExportKind;
+  status: JobStatus;
+  progress: number;
+  output_path: string | null;
+  error_message: string | null;
+  retry_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 async function parseErrorMessage(response: Response): Promise<string> {
@@ -179,4 +195,28 @@ export function regenerateSegment(segmentId: string): Promise<Artifact> {
   return request<Artifact>(`/segments/${segmentId}/regenerate`, {
     method: "POST",
   });
+}
+
+export function exportMp3(mediaId: string): Promise<ExportJob> {
+  return request<ExportJob>(`/media/${mediaId}/export/mp3`, { method: "POST" });
+}
+
+export function exportMp4(mediaId: string): Promise<ExportJob> {
+  return request<ExportJob>(`/media/${mediaId}/export/mp4`, { method: "POST" });
+}
+
+export function getExportJob(exportJobId: string): Promise<ExportJob> {
+  return request<ExportJob>(`/export-jobs/${exportJobId}`);
+}
+
+export function srtDownloadUrl(mediaId: string): string {
+  return `${API_URL}/media/${mediaId}/export/srt`;
+}
+
+export function vttDownloadUrl(mediaId: string): string {
+  return `${API_URL}/media/${mediaId}/export/vtt`;
+}
+
+export function exportDownloadUrl(exportJobId: string): string {
+  return `${API_URL}/export-jobs/${exportJobId}/download`;
 }
