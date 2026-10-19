@@ -1,0 +1,78 @@
+.footer {
+  position: relative;
+  padding: 60px 24px 0;
+  overflow: hidden;
+}
+.fcols {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.fcols h6 {
+  margin: 0 0 16px;
+  font: 500 14px Inter;
+  letter-spacing: -0.42px;
+}
+.fcols a {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: -0.42px;
+  transition:
+    opacity 0.15s,
+    transform 0.12s;
+}
+.fcols a:hover {
+  opacity: 0.6;
+}
+.fcols a:active {
+  transform: scale(0.97);
+}
+.fcols p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--faint);
+}
+
+/* big wordmark filled with a tiled blue pattern */
+.wordmark {
+  margin: 30px 0 0;
+  padding-bottom: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 500;
+  font-size: min(17vw, 250px);
+  line-height: 0.85;
+  letter-spacing: -0.07em;
+  color: transparent;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.55) 0 2px,
+      transparent 2px 26px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.55) 0 2px,
+      transparent 2px 34px
+    ),
+    linear-gradient(#a8d6fb, #5eaee9);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.copy-line {
+  padding: 16px 0 26px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+@media (max-width: 820px) {
+  .fcols {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

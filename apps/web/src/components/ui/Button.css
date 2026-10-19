@@ -1,0 +1,47 @@
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 22px 1px 18px;
+  border-radius: 999px;
+  font:
+    500 20px Inter,
+    sans-serif;
+  letter-spacing: -0.6px;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  transition:
+    transform 0.12s,
+    opacity 0.15s;
+}
+.btn::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 3px;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+.btn.primary {
+  background: var(--aqua);
+  border: 1px solid #221898;
+}
+.btn.secondary {
+  background: var(--silver);
+  border: 1px solid #626262;
+}
+.btn:hover {
+  opacity: 0.8;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn svg {
+  width: 20px;
+  height: 20px;
+}
