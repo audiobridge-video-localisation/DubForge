@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import MacWindow from "./ui/MacWindow.jsx";
 import Draggable from "./ui/Draggable.jsx";
 import "./Hero.css";
@@ -45,9 +45,9 @@ function Wave({ purple = false }) {
   );
 }
 
-function Workspace() {
+function Workspace({ phase, focus, running, onReplay, onPause }) {
   return (
-    <div className="studio-preview">
+    <div className={`studio-preview phase-${phase} focus-${focus}`}>
       <aside className="studio-sidebar">
         <small>PROJECT</small>
         <strong>A brighter tomorrow</strong>
@@ -71,7 +71,10 @@ function Workspace() {
       <div className="studio-editor">
         <div className="studio-steps">
           {["Upload", "Review", "Translate", "Dub", "Export"].map((step, i) => (
-            <span className={i === 2 ? "active" : ""} key={step}>
+            <span
+              className={i === Math.min(phase + 1, 4) ? "active" : ""}
+              key={step}
+            >
               <b>{i < 2 ? "✓" : i + 1}</b>
               {step}
             </span>
@@ -87,7 +90,10 @@ function Workspace() {
             <span>Status</span>
           </div>
           {rows.map(([speaker, source, target], i) => (
-            <div className="studio-row" key={source}>
+            <div
+              className={`studio-row ${i === 0 ? "demo-row" : ""}`}
+              key={source}
+            >
               <span className="row-number">00{i + 1}</span>
               <span>
                 <b
@@ -96,9 +102,14 @@ function Workspace() {
                   {speaker}
                 </b>
               </span>
-              <span>{source}</span>
-              <span>{target}</span>
-              <span className="approved" aria-label="Approved">
+              <span className="demo-source">{source}</span>
+              <span className="demo-target">{target}</span>
+              <span
+                className="approved"
+                aria-label={
+                  i === 0 && phase < 3 ? "Awaiting review" : "Approved"
+                }
+              >
                 ✓
               </span>
             </div>
@@ -123,8 +134,31 @@ function Workspace() {
           <div className="timeline-cursor" />
         </div>
         <div className="studio-transport">
-          <span>▶</span>
-          <span>00:08 / 00:28</span>
+          <button
+            type="button"
+            className="demo-control"
+            onClick={phase === 4 ? onReplay : onPause}
+            aria-label={
+              phase === 4
+                ? "Replay localization demo"
+                : running
+                  ? "Pause localization demo"
+                  : "Resume localization demo"
+            }
+          >
+            {phase === 4 ? "↻" : running ? "Ⅱ" : "▶"}
+          </button>
+          <span className="demo-caption" aria-live="polite">
+            {
+              [
+                "Review source",
+                "Translate to Spanish",
+                "Match voice & timing",
+                "Review approved",
+                "Demo complete",
+              ][phase]
+            }
+          </span>
           <div className="transport-rail">
             <i />
           </div>
@@ -138,7 +172,43 @@ function Workspace() {
 }
 
 export default function Hero() {
+  const section = useRef(null);
   const [positions, setPositions] = useState(initial);
+  const [focus, setFocus] = useState(-1);
+  const [phase, setPhase] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const [playing, setPlaying] = useState(true);
+  const [layoutKey, setLayoutKey] = useState(0);
+  const [reduced, setReduced] = useState(
+    () => globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  const running = visible && playing && phase < 4 && !reduced;
+  useEffect(() => {
+    const media = globalThis.matchMedia("(prefers-reduced-motion: reduce)");
+    const change = () => setReduced(media.matches);
+    media.addEventListener("change", change);
+    const observer = new IntersectionObserver(
+      ([entry]) => setVisible(entry.isIntersecting),
+      { threshold: 0.15 },
+    );
+    observer.observe(section.current);
+    return () => {
+      media.removeEventListener("change", change);
+      observer.disconnect();
+    };
+  }, []);
+  useEffect(() => {
+    if (!running) return;
+    const timer = globalThis.setTimeout(
+      () => setPhase((value) => Math.min(value + 1, 4)),
+      1700,
+    );
+    return () => globalThis.clearTimeout(timer);
+  }, [running, phase]);
+  const replay = () => {
+    setPhase(0);
+    setPlaying(true);
+  };
   const update = (i) => (position) =>
     setPositions((old) => old.map((p, index) => (index === i ? position : p)));
   const cards = [
@@ -202,7 +272,10 @@ export default function Hero() {
     </>,
   ];
   return (
-    <section className="hero">
+    <section
+      ref={section}
+      className={`hero ${visible ? "in-view" : ""} ${running ? "demo-running" : ""} ${running && phase === 2 ? "audio-playing" : ""}`}
+    >
       <div className="canvas">
         <svg className="board-wires" viewBox="0 0 1440 1140" aria-hidden="true">
           {positions.slice(0, 4).map((p, i) => {
@@ -213,6 +286,12 @@ export default function Hero() {
             return (
               <path
                 key={i}
+                className={
+                  focus === i || (running && [0, 2, 3, 3][phase] === i)
+                    ? "wire-active"
+                    : ""
+                }
+                pathLength="1"
                 d={`M${startX},${startY} C${startX},${endY} ${endX},${startY} ${endX},${endY}`}
               />
             );
@@ -228,12 +307,25 @@ export default function Hero() {
         </div>
         {cards.map((card, i) => (
           <Draggable
-            key={i}
+            key={`${layoutKey}-${i}`}
             x={initial[i].x}
             y={initial[i].y}
             rot={[-5, 5, -5, 5][i]}
             className={`artifact artifact-${i}`}
             onPositionChange={update(i)}
+            interactionProps={{
+              tabIndex: 0,
+              "aria-label": [
+                "Original scene card",
+                "Source audio card",
+                "Subtitle translation card",
+                "Voice matching card",
+              ][i],
+              onPointerEnter: () => setFocus(i),
+              onPointerLeave: () => setFocus(-1),
+              onFocus: () => setFocus(i),
+              onBlur: () => setFocus(-1),
+            }}
           >
             <span className="artifact-index">{i + 1}</span>
             {card}
@@ -245,16 +337,37 @@ export default function Hero() {
           natural ↙
         </span>
         <Draggable
+          key={`studio-${layoutKey}`}
           x={initial[4].x}
           y={initial[4].y}
           className="studio-window"
           onPositionChange={update(4)}
         >
           <MacWindow title="DubForge / localization desk">
-            <Workspace />
+            <Workspace
+              phase={reduced ? 4 : phase}
+              focus={focus}
+              running={running}
+              onReplay={replay}
+              onPause={() => setPlaying((value) => !value)}
+            />
           </MacWindow>
         </Draggable>
-        <span className="board-footer">One story. Every language.</span>
+        <div className="board-footer">
+          <span>One story. Every language.</span>
+          <button type="button" onClick={replay}>
+            Replay demo ↻
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPositions(initial);
+              setLayoutKey((value) => value + 1);
+            }}
+          >
+            Reset layout ↺
+          </button>
+        </div>
       </div>
     </section>
   );

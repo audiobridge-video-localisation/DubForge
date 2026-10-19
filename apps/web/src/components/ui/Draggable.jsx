@@ -11,11 +11,13 @@ export default function Draggable({
   style,
   children,
   onPositionChange,
+  interactionProps,
 }) {
   const el = useRef(null);
   const drag = useRef(null);
 
   const onDown = (e) => {
+    if (e.button !== 0) return;
     if (e.target.closest("a, button, input, select, textarea")) return;
     const scale =
       el.current.parentElement.getBoundingClientRect().width /
@@ -51,7 +53,14 @@ export default function Draggable({
     <div
       ref={el}
       className={`draggable ${className}`}
-      style={{ left: x, top: y, transform: `rotate(${rot}deg)`, ...style }}
+      style={{
+        left: x,
+        top: y,
+        transform: `rotate(${rot}deg)`,
+        "--card-rotation": `${rot}deg`,
+        ...style,
+      }}
+      {...interactionProps}
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}

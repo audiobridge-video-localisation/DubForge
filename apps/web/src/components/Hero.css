@@ -170,6 +170,7 @@
   border-radius: 3px;
   background: #8fb8ff;
   animation: desk-wave 2s ease-in-out infinite alternate;
+  animation-play-state: paused;
 }
 .desk-wave.purple i {
   background: #b8a0e8;
@@ -404,6 +405,7 @@
   width: 1px;
   background: #2166ff;
   animation: desk-scan 16s linear infinite;
+  animation-play-state: paused;
 }
 .studio-transport {
   display: flex;
@@ -440,6 +442,213 @@
 @keyframes desk-wave {
   to {
     transform: scaleY(0.65);
+  }
+}
+.hero .artifact,
+.hero .studio-window {
+  transition:
+    box-shadow 220ms ease,
+    scale 350ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 450ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.hero .artifact:hover {
+  box-shadow: 0 16px 32px #172b4a20;
+}
+.hero .artifact:focus-visible {
+  outline: 2px solid #2166ff;
+  outline-offset: 6px;
+}
+.hero .draggable.dragging {
+  transform: rotate(0deg) !important;
+  scale: 1.025;
+  box-shadow: 0 25px 45px #172b4a25;
+}
+.hero .studio-window.dragging {
+  scale: 1.008;
+}
+.hero .hero-heading > * {
+  animation: desk-enter 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.hero .hero-heading p {
+  animation-delay: 80ms;
+}
+.hero .hero-heading .hero-open {
+  animation-delay: 160ms;
+}
+.hero .hero-heading > small {
+  animation-delay: 220ms;
+}
+.hero.in-view .artifact {
+  animation: card-enter 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.hero.in-view .artifact-0 {
+  animation-delay: 130ms;
+}
+.hero.in-view .artifact-1 {
+  animation-delay: 220ms;
+}
+.hero.in-view .artifact-2 {
+  animation-delay: 310ms;
+}
+.hero.in-view .artifact-3 {
+  animation-delay: 400ms;
+}
+.hero.in-view .studio-window {
+  animation: desk-enter 750ms 100ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.board-wires path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  transition:
+    stroke 220ms,
+    opacity 220ms;
+}
+.hero.in-view .board-wires path {
+  animation: wire-draw 900ms 300ms ease both;
+}
+.board-wires path.wire-active {
+  stroke: #397dff;
+  stroke-width: 2;
+  opacity: 1;
+}
+.audio-playing .desk-wave i {
+  animation-play-state: running;
+}
+.audio-playing .timeline-cursor {
+  animation-play-state: running;
+}
+.studio-row,
+.studio-steps > span,
+.timeline-track,
+.demo-source,
+.demo-target {
+  transition:
+    background 250ms,
+    opacity 250ms,
+    color 250ms;
+}
+.phase-0 .demo-row .demo-source,
+.focus-0 .demo-row .demo-source {
+  background: #eaf1ff;
+  border-radius: 4px;
+}
+.phase-0 .demo-row .demo-target {
+  opacity: 0.22;
+}
+.phase-1 .demo-row .demo-target,
+.focus-2 .demo-row .demo-target {
+  background: #eeebff;
+  border-radius: 4px;
+}
+.phase-2 .studio-timeline,
+.focus-1 .studio-timeline,
+.focus-3 .studio-timeline {
+  background: #f0f5ff;
+}
+.phase-0 .demo-row .approved,
+.phase-1 .demo-row .approved,
+.phase-2 .demo-row .approved {
+  opacity: 0.12;
+  transform: scale(0.8);
+}
+.demo-row .approved {
+  transition:
+    opacity 300ms,
+    transform 450ms cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+.phase-3 .demo-row {
+  background: #f0faf3;
+}
+.demo-control {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #dce6ff;
+  background: #eef4ff;
+  color: #2166ff;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.demo-caption {
+  min-width: 105px;
+}
+.hero button:focus-visible,
+.hero a:focus-visible {
+  outline: 2px solid #2166ff;
+  outline-offset: 4px;
+}
+.hero button {
+  transition:
+    background 180ms,
+    scale 180ms;
+}
+.hero button:hover {
+  background: #e5eeff;
+}
+.hero button:active,
+.hero-open:active {
+  scale: 0.97;
+}
+.board-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+}
+.board-footer button {
+  border: 0;
+  border-bottom: 1px solid #cdd7ea;
+  padding: 5px 0;
+  color: #667d9f;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+@keyframes desk-enter {
+  from {
+    opacity: 0;
+    translate: 0 20px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes wire-draw {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+@supports (animation-timeline: view()) {
+  @media (min-width: 1101px) and (prefers-reduced-motion: no-preference) {
+    .board-annotation {
+      animation: annotation-recede linear both;
+      animation-timeline: view();
+      animation-range: exit 0% exit 80%;
+    }
+    @keyframes annotation-recede {
+      to {
+        opacity: 0.25;
+      }
+    }
   }
 }
 @keyframes desk-scan {
