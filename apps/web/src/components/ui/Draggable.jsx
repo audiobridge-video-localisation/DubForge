@@ -10,11 +10,16 @@ export default function Draggable({
   className = "",
   style,
   children,
+  onPositionChange,
 }) {
   const el = useRef(null);
   const drag = useRef(null);
 
   const onDown = (e) => {
+    if (e.target.closest("a, button, input, select, textarea")) return;
+    const scale =
+      el.current.parentElement.getBoundingClientRect().width /
+      el.current.parentElement.offsetWidth;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = {
       id: e.pointerId,
@@ -22,6 +27,7 @@ export default function Draggable({
       sy: e.clientY,
       ox: el.current.offsetLeft,
       oy: el.current.offsetTop,
+      scale,
     };
     el.current.classList.add("dragging");
     e.preventDefault();
@@ -29,8 +35,11 @@ export default function Draggable({
   const onMove = (e) => {
     const d = drag.current;
     if (!d || d.id !== e.pointerId) return;
-    el.current.style.left = `${d.ox + e.clientX - d.sx}px`;
-    el.current.style.top = `${d.oy + e.clientY - d.sy}px`;
+    const x = d.ox + (e.clientX - d.sx) / d.scale;
+    const y = d.oy + (e.clientY - d.sy) / d.scale;
+    el.current.style.left = `${x}px`;
+    el.current.style.top = `${y}px`;
+    onPositionChange?.({ x, y });
   };
   const onUp = (e) => {
     if (drag.current?.id !== e.pointerId) return;
