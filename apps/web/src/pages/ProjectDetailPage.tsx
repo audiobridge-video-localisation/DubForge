@@ -3,14 +3,22 @@ import { Link, useParams } from "react-router-dom";
 
 import {
   approveSegment,
+  exportDownloadUrl,
+  exportMp3,
+  exportMp4,
+  getExportJob,
   getProject,
   markReadyForDubbing,
   regenerateSegment,
   requestSegmentChanges,
   retryJob,
+  srtDownloadUrl,
   updateSegment,
   uploadMedia,
+  vttDownloadUrl,
   type Artifact,
+  type ExportJob,
+  type ExportKind,
   type MediaWithJob,
   type Project,
   type Segment,
@@ -40,6 +48,12 @@ function isArtifactInFlight(artifact: Artifact | null): boolean {
 function isAudioProblem(status: SegmentAudioStatus): boolean {
   return status === "failed" || status === "mismatch" || status === "outdated";
 }
+
+function isExportInFlight(job: ExportJob | undefined): boolean {
+  return job?.status === "pending" || job?.status === "processing";
+}
+
+const EXPORT_KINDS: ExportKind[] = ["mp3", "mp4"];
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -316,6 +330,13 @@ export function ProjectDetailPage() {
     Record<string, string | null>
   >({});
 
+  const [exportJobs, setExportJobs] = useState<
+    Record<string, Partial<Record<ExportKind, ExportJob>>>
+  >({});
+  const [exportError, setExportError] = useState<Record<string, string | null>>(
+    {},
+  );
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -342,6 +363,33 @@ export function ProjectDetailPage() {
 
     return () => clearInterval(interval);
   }, [id, media]);
+
+  useEffect(() => {
+    const inFlightJobs = Object.entries(exportJobs).flatMap(
+      ([mediaId, byKind]) =>
+        EXPORT_KINDS.filter((kind) => isExportInFlight(byKind[kind])).map(
+          (kind) => ({
+            mediaId,
+            kind,
+            job: byKind[kind] as ExportJob,
+          }),
+        ),
+    );
+    if (inFlightJobs.length === 0) return;
+
+    const interval = setInterval(() => {
+      inFlightJobs.forEach(({ mediaId, kind, job }) => {
+        getExportJob(job.id).then((updated) => {
+          setExportJobs((current) => ({
+            ...current,
+            [mediaId]: { ...current[mediaId], [kind]: updated },
+          }));
+        });
+      });
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [exportJobs]);
 
   async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -477,6 +525,23 @@ export function ProjectDetailPage() {
     }
   }
 
+  async function handleExport(mediaId: string, kind: ExportKind) {
+    setExportError((current) => ({ ...current, [mediaId]: null }));
+    try {
+      const job =
+        kind === "mp3" ? await exportMp3(mediaId) : await exportMp4(mediaId);
+      setExportJobs((current) => ({
+        ...current,
+        [mediaId]: { ...current[mediaId], [kind]: job },
+      }));
+    } catch (err) {
+      setExportError((current) => ({
+        ...current,
+        [mediaId]: (err as Error).message,
+      }));
+    }
+  }
+
   async function handleReadyForDubbing(mediaId: string) {
     setDubbingError((current) => ({ ...current, [mediaId]: null }));
     try {
@@ -593,6 +658,85 @@ export function ProjectDetailPage() {
                     {dubbingError[item.media.id] && (
                       <p role="alert">{dubbingError[item.media.id]}</p>
                     )}
+
+                    <h3>Export</h3>
+                    <p>
+                      <a href={srtDownloadUrl(item.media.id)}>Download SRT</a>{" "}
+                      <a href={vttDownloadUrl(item.media.id)}>Download VTT</a>
+                    </p>
+                    {(() => {
+                      const voiceProfiles = Array.from(
+                        new Set(
+                          item.segments
+                            .map((s) => s.artifact?.voice_profile)
+                            .filter((v): v is string => Boolean(v)),
+                        ),
+                      );
+                      return (
+                        voiceProfiles.length > 0 && (
+                          <p>Voices used: {voiceProfiles.join(", ")}</p>
+                        )
+                      );
+                    })()}
+                    {(() => {
+                      const dubReady =
+                        item.total_count > 0 &&
+                        item.approved_count === item.total_count &&
+                        item.usable_audio_count === item.total_count;
+                      return (
+                        <>
+                          {EXPORT_KINDS.map((kind) => {
+                            const job = exportJobs[item.media.id]?.[kind];
+                            return (
+                              <span key={kind}>
+                                <button
+                                  type="button"
+                                  disabled={!dubReady || isExportInFlight(job)}
+                                  onClick={() =>
+                                    handleExport(item.media.id, kind)
+                                  }
+                                >
+                                  Export dubbed {kind.toUpperCase()}
+                                </button>{" "}
+                              </span>
+                            );
+                          })}
+                          {!dubReady && (
+                            <p>
+                              All segments must be approved and have usable
+                              audio before exporting.
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {EXPORT_KINDS.map((kind) => {
+                      const job = exportJobs[item.media.id]?.[kind];
+                      if (!job) return null;
+                      return (
+                        <p key={kind}>
+                          {kind.toUpperCase()}: {job.status}
+                          {isExportInFlight(job) && (
+                            <progress value={job.progress} max={100}>
+                              {job.progress}%
+                            </progress>
+                          )}
+                          {job.status === "completed" && (
+                            <>
+                              {" "}
+                              <a href={exportDownloadUrl(job.id)}>Download</a>
+                            </>
+                          )}
+                          {job.status === "failed" && (
+                            <span role="alert"> {job.error_message}</span>
+                          )}
+                        </p>
+                      );
+                    })}
+                    {exportError[item.media.id] && (
+                      <p role="alert">{exportError[item.media.id]}</p>
+                    )}
+
                     <ol>
                       {item.segments.map((segment) => (
                         <SegmentRow
