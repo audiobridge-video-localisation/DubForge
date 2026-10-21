@@ -27,6 +27,7 @@ import { MediaPanel } from "../components/app/MediaPanel";
 import { ProjectHeader } from "../components/app/ProjectHeader";
 import { UploadDropzone } from "../components/app/UploadDropzone";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { forgetExport, rememberExport, storedExportIds } from "../lib/exports";
 import { isArtifactInFlight, isJobInFlight } from "../lib/workflow";
 
 const EXPORT_KINDS: ExportKind[] = ["mp3", "mp4"];
@@ -73,6 +74,23 @@ export function ProjectDetailPage() {
         if (cancelled) return;
         setProject(detail);
         setMedia(detail.media);
+        // bring back exports started earlier in this browser, so the player returns
+        for (const item of detail.media) {
+          const stored = storedExportIds(item.media.id);
+          for (const kind of EXPORT_KINDS) {
+            const jobId = stored[kind];
+            if (!jobId) continue;
+            getExportJob(jobId)
+              .then((job) => {
+                if (cancelled) return;
+                setExportJobs((current) => ({
+                  ...current,
+                  [item.media.id]: { ...current[item.media.id], [kind]: job },
+                }));
+              })
+              .catch(() => forgetExport(item.media.id, kind));
+          }
+        }
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -258,6 +276,7 @@ export function ProjectDetailPage() {
     try {
       const job =
         kind === "mp3" ? await exportMp3(mediaId) : await exportMp4(mediaId);
+      rememberExport(mediaId, kind, job.id);
       setExportJobs((current) => ({
         ...current,
         [mediaId]: { ...current[mediaId], [kind]: job },

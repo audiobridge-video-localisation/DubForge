@@ -763,6 +763,123 @@ a {
   min-width: 100px;
 }
 
+/* dub player */
+.app .player {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--a-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.app .player-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+.app .player-head h3 {
+  font-size: 15px;
+}
+.app .seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--a-soft);
+}
+.app .seg button {
+  padding: 4px 14px 5px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.app .seg .seg-on {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(21, 23, 28, 0.15);
+}
+.app .player-video {
+  width: auto;
+  max-width: 100%;
+  max-height: 340px;
+  border: 1.5px solid var(--edge, #15171c);
+  border-radius: 10px;
+  background: #0d0f14;
+}
+.app .player-audio {
+  width: 100%;
+  max-width: 520px;
+}
+.app .player-now {
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.app .player-stale {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fdf3ee;
+  color: #6e3118;
+  font-size: 13px;
+}
+.app .mini-player {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 10px;
+  border: 1.5px solid var(--edge, #15171c);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 3px 3px 0 var(--edge, #15171c);
+  font-size: 13px;
+  font-weight: 500;
+  transform: translateX(-50%);
+  animation: a-rise 220ms cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+}
+@keyframes a-rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+}
+/* the line being played, and the button that jumps to a line */
+.app .row-playing td {
+  background: #fdf3ec;
+}
+.app .row-playing td:first-child {
+  box-shadow: inset 3px 0 0 var(--peach-deep, #e58a6b);
+}
+.app .time-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: -4px -8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms;
+}
+.app .time-btn span {
+  font-size: 10px;
+}
+.app .time-btn:hover {
+  background: var(--a-soft);
+}
+
 /* inline messages */
 .app .inline-error {
   margin: 0;
@@ -1309,6 +1426,10 @@ a {
   .app .table .row .status-stack {
     display: flex;
     flex-wrap: wrap;
+  }
+  .app .table .row-playing {
+    border-color: var(--peach-deep, #e58a6b);
+    background: #fdf3ec;
   }
   .app .table .row-approved {
     border-left: 3px solid #3f87ab;

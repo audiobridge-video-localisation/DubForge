@@ -99,8 +99,16 @@ export interface SegmentHandlers {
 
 export function SegmentTable({
   segments,
+  activeId,
+  onSeek,
   ...handlers
-}: { segments: Segment[] } & SegmentHandlers) {
+}: {
+  segments: Segment[];
+  /** the line the dub player is currently on */
+  activeId: string | null;
+  /** present when a dub can be played; makes each line's time a play button */
+  onSeek?: (ms: number) => void;
+} & SegmentHandlers) {
   const [filter, setFilter] = useState<ReviewFilter>("all");
   const counts = countByFilter(segments);
   const visible = segments.filter((s) => matchesFilter(s, filter));
@@ -152,7 +160,13 @@ export function SegmentTable({
             </thead>
             <tbody>
               {visible.map((segment) => (
-                <SegmentRow key={segment.id} segment={segment} {...handlers} />
+                <SegmentRow
+                  key={segment.id}
+                  segment={segment}
+                  playing={segment.id === activeId}
+                  onSeek={onSeek}
+                  {...handlers}
+                />
               ))}
             </tbody>
           </table>
@@ -167,11 +181,17 @@ export function SegmentTable({
 
 function SegmentRow({
   segment,
+  playing,
+  onSeek,
   onSave,
   onApprove,
   onRequestChanges,
   onRegenerate,
-}: { segment: Segment } & SegmentHandlers) {
+}: {
+  segment: Segment;
+  playing: boolean;
+  onSeek?: (ms: number) => void;
+} & SegmentHandlers) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -219,13 +239,30 @@ function SegmentRow({
   return (
     <>
       <tr
-        className={`row row-${segment.review_status}${editing ? " row-editing" : ""}`}
+        className={`row row-${segment.review_status}${editing ? " row-editing" : ""}${playing ? " row-playing" : ""}`}
+        aria-current={playing ? "true" : undefined}
       >
         <td className="c-num" data-label="#">
           {segment.index + 1}
         </td>
         <td className="c-time" data-label="Time">
-          {formatTimestamp(segment.start_ms)}–{formatTimestamp(segment.end_ms)}
+          {onSeek ? (
+            <button
+              type="button"
+              className="time-btn"
+              aria-label={`Play line ${segment.index + 1} from ${formatTimestamp(segment.start_ms)}`}
+              onClick={() => onSeek(segment.start_ms)}
+            >
+              <span aria-hidden="true">{playing ? "♪" : "▶"}</span>
+              {formatTimestamp(segment.start_ms)}–
+              {formatTimestamp(segment.end_ms)}
+            </button>
+          ) : (
+            <>
+              {formatTimestamp(segment.start_ms)}–
+              {formatTimestamp(segment.end_ms)}
+            </>
+          )}
         </td>
         <td className="c-dur" data-label="Duration">
           {formatDuration(segment.duration_ms)}

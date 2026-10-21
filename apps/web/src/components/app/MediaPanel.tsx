@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   exportDownloadUrl,
@@ -15,6 +15,7 @@ import {
   stageLabel,
   type Tone,
 } from "../../lib/workflow";
+import { DubPlayer } from "./DubPlayer";
 import { SegmentTable, type SegmentHandlers } from "./SegmentTable";
 import { StatusBadge } from "./StatusBadge";
 
@@ -101,6 +102,18 @@ export function MediaPanel({
     total_count,
     usable_audio_count,
   } = item;
+  const mediaRef = useRef<HTMLMediaElement | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const canPlay = EXPORT_KINDS.some(
+    (kind) => exportJobs[kind]?.status === "completed",
+  );
+
+  function seekTo(ms: number) {
+    const el = mediaRef.current;
+    if (!el) return;
+    el.currentTime = ms / 1000;
+    void el.play();
+  }
   const [retryError, setRetryError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
 
@@ -336,7 +349,20 @@ export function MediaPanel({
             </div>
           </section>
 
-          <SegmentTable segments={segments} {...segmentHandlers} />
+          <DubPlayer
+            jobs={exportJobs}
+            segments={segments}
+            mediaRef={mediaRef}
+            activeId={activeId}
+            onActive={setActiveId}
+          />
+
+          <SegmentTable
+            segments={segments}
+            activeId={activeId}
+            onSeek={canPlay ? seekTo : undefined}
+            {...segmentHandlers}
+          />
         </>
       )}
     </article>
