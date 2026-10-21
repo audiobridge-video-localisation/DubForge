@@ -10,10 +10,18 @@
 }
 .qa {
   overflow: hidden;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  background: #fdfdfe;
+  border: 1.5px solid rgba(21, 23, 28, 0.16);
+  border-radius: 12px;
+  transition:
+    border-color 250ms,
+    box-shadow 250ms,
+    translate 250ms;
+}
+.qa.open {
+  border-color: var(--edge);
+  box-shadow: 3px 3px 0 var(--edge);
+  translate: -1px -1px;
 }
 .qa button {
   all: unset;
@@ -26,7 +34,7 @@
   cursor: pointer;
   font-size: 17px;
   font-weight: 500;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.02em;
 }
 .qa button::after {
   content: "+";
@@ -35,6 +43,11 @@
 }
 .qa.open button::after {
   transform: rotate(45deg);
+}
+.qa button:focus-visible {
+  outline: 2px solid var(--edge);
+  outline-offset: -4px;
+  border-radius: 10px;
 }
 .qa .a {
   display: grid;
@@ -50,8 +63,14 @@
 .qa .a p {
   margin: 0;
   padding: 0 22px 20px;
-  font-size: 14.5px;
-  line-height: 1.4;
+  font-size: 15px;
+  line-height: 1.55;
   color: var(--muted);
-  letter-spacing: -0.43px;
+  letter-spacing: -0.02em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qa,
+  .qa .a {
+    transition: none;
+  }
 }

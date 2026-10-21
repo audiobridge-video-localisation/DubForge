@@ -3,6 +3,7 @@ import DeskWindow from "./ui/DeskWindow.jsx";
 import Button from "./ui/Button.jsx";
 import Draggable from "./ui/Draggable.jsx";
 import { langs } from "../data/langs.js";
+import { rows } from "../data/demo.js";
 import {
   onDubRequest,
   setDeskLang,
@@ -11,55 +12,11 @@ import {
 import "./Hero.css";
 
 // Drop scene-04.mov on a folder and the whole desk re-localizes.
-const rows = [
-  [
-    "Sophia",
-    "It still feels like yesterday.",
-    {
-      es: "Todavía se siente como ayer.",
-      fr: "On dirait que c'était hier.",
-      de: "Es fühlt sich an wie gestern.",
-      ja: "まるで昨日のことのようだ。",
-    },
-  ],
-  [
-    "Sophia",
-    "A city that changes in quiet ways.",
-    {
-      es: "Una ciudad que cambia de formas silenciosas.",
-      fr: "Une ville qui change en silence.",
-      de: "Eine Stadt, die sich leise verändert.",
-      ja: "静かに変わっていく街。",
-    },
-  ],
-  [
-    "Marcus",
-    "You notice it more when you leave.",
-    {
-      es: "Lo notas más cuando te vas.",
-      fr: "On le remarque plus en partant.",
-      de: "Man merkt es erst, wenn man geht.",
-      ja: "離れて初めて気づく。",
-    },
-  ],
-  [
-    "Sophia",
-    "But it always feels like home to me.",
-    {
-      es: "Pero siempre se siente como casa para mí.",
-      fr: "Mais pour moi, c'est toujours comme à la maison.",
-      de: "Aber für mich fühlt es sich immer nach Zuhause an.",
-      ja: "それでも、ここはいつも我が家のよう。",
-    },
-  ],
-];
 
 // Everything is placed on a fixed 1440px canvas.
 const folderSpots = {
-  es: { x: 378, y: 255 },
-  fr: { x: 405, y: 385 },
-  de: { x: 1130, y: 262 },
-  ja: { x: 1110, y: 478 },
+  hi: { x: 378, y: 255 },
+  bn: { x: 1130, y: 262 },
 };
 const trinkets = [
   { type: "hello", x: 395, y: 28, rot: 4 },
@@ -114,7 +71,7 @@ function Trinket({ item, lang }) {
           </span>
           <div>
             <b>Sophia</b>
-            <small>voice kept · {l.code}</small>
+            <small>dubbed to {l.name}</small>
           </div>
         </div>
       )}
@@ -455,7 +412,7 @@ export default function Hero() {
         <div className="mini-wave">
           <Wave />
           <span>
-            <b>{l.code}</b> voice matched · 00:28
+            <b>{l.code}</b> timing checked · 00:28
           </span>
         </div>
       ),
@@ -563,7 +520,7 @@ export default function Hero() {
         <div className="hero-heading">
           <h1>DubForge</h1>
           <p>
-            localize every voice, without losing the <em>feeling</em>
+            localize your video, one <em>reviewed</em> line at a time
           </p>
           <div className="ctas">
             <Button variant="primary" href="/app">

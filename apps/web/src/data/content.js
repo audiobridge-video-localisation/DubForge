@@ -1,262 +1,152 @@
-// All page copy and layout data lives here so components stay presentational.
+// Landing page copy lives here so components stay presentational. Every claim is
+// checked against the code in apps/api and pipeline.
 export const brand = "DubForge";
 
 export const navLinks = [
-  { label: "features", href: "#feat" },
-  { label: "pricing", href: "#pr" },
-  { label: "trust", href: "#" },
-  { label: "changelog", href: "#" },
-  { label: "careers", href: "#" },
+  { label: "how it works", href: "#how" },
+  { label: "review", href: "#review" },
+  { label: "early access", href: "#start" },
+  { label: "faq", href: "#faq" },
 ];
 
-// Hero decorations are positioned on a fixed 1440px canvas.
-export const heroClips = [
+export const pipelineSteps = [
   {
-    file: "translate-anything.mov",
-    art: "art1",
-    x: 140,
-    y: 76,
-    w: 123,
-    h: 232,
-  },
-  { file: "voice-match.mov", art: "art2", x: 543, y: 26, w: 181, h: 130 },
-  { file: "multi-language.mov", art: "art3", x: 1011, y: 62, w: 250, h: 150 },
-  { file: "review-pass.mov", art: "art4", x: 1278, y: 379, w: 147, h: 278 },
-  { file: "dubbing-studio.mov", art: "art5", x: 53, y: 406, w: 221, h: 148 },
-];
-
-export const decor = [
-  { type: "tag", tone: "blue", x: 331, y: 25, rot: 4 },
-  { type: "tag", tone: "red", x: 1255, y: 140, rot: -7.5 },
-  { type: "kao", text: "^ ω ^", x: 396, y: 121, rot: -8, size: 24 },
-  { type: "kao", text: "¯\\_(ツ)_/¯", x: 880, y: 81, rot: -7.7, size: 18 },
-  { type: "kao", text: "{ ^-^ }", x: 1200, y: 392, rot: 7, size: 24 },
-  { type: "kao", text: "(¬_¬)", x: 305, y: 458, rot: -7.7, size: 18 },
-  { type: "folder", x: 326, y: 240 },
-  { type: "folder", x: 1170, y: 478 },
-  { type: "trash", x: 62, y: 280 },
-  { type: "beach", x: 828, y: 202 },
-];
-
-export const features = [
-  {
-    phrases: [
-      "DubForge, translate this cut",
-      "keep the timing natural",
-      "show me the review pass",
-    ],
-    title: "translate without losing the edit",
-    body: "move from source audio to a reviewable localized cut while the timing, intent, and scene context stay together.",
-    windowTitle: "Translation desk",
-    art: "art3",
+    id: "upload",
+    title: "upload a video",
+    body: "start a project and upload your video. FFmpeg pulls the audio track out so the models can work on it.",
+    chips: ["FFmpeg"],
   },
   {
-    phrases: [
-      "match the speaker tone",
-      "flag this line for review",
-      "export the approved version",
-    ],
-    title: "review every voice in one place",
-    body: "keep dialogue, translations, approvals, and final delivery connected in a focused browser workspace.",
-    windowTitle: "Review room",
-    art: "art2",
+    id: "transcribe",
+    title: "transcribe the dialogue",
+    body: "faster-whisper turns English speech into timed segments. with an AssemblyAI key it also labels who is speaking. lines shorter than half a second are merged so they stay speakable.",
+    chips: ["faster-whisper", "AssemblyAI"],
+  },
+  {
+    id: "translate",
+    title: "translate line by line",
+    body: "NLLB-200 translates each segment from English into Hindi or Bengali, one line at a time. every project dubs into one target language.",
+    chips: ["NLLB-200", "English → Hindi / Bengali"],
+  },
+  {
+    id: "dub",
+    title: "give every line a voice",
+    body: "a text-to-speech voice reads each translated line. DubForge then measures each clip against the original line's duration.",
+    chips: ["Edge TTS", "MMS-TTS"],
+  },
+  {
+    id: "review",
+    title: "review before it ships",
+    body: "approve a line, request changes, edit the text, or regenerate just that line's audio. editing a line marks its old audio outdated.",
+    chips: ["approve", "request changes", "regenerate"],
+  },
+  {
+    id: "export",
+    title: "export the dub",
+    body: "subtitles export as soon as a project has segments. the dubbed video and audio unlock once every line is approved and its audio fits.",
+    chips: ["MP4", "MP3", "SRT", "VTT"],
   },
 ];
 
-export const manifesto = [
-  "great localization should preserve the feeling of the original performance.",
-  "DubForge keeps the creative team close to the words, timing, and voice at every step.",
-  "upload a cut, shape the translation, and ship the version that feels right.",
+export const reviewChecks = [
+  {
+    id: "timing",
+    ext: "TIME",
+    title: "timing is measured, not assumed",
+    body: "a dubbed line is flagged when it runs more than 300 ms or 15% off the original, whichever allowance is larger.",
+  },
+  {
+    id: "changes",
+    ext: "FIX",
+    title: "send a line back",
+    body: "request changes on any line. the dubbed video and audio stay locked until every line is approved.",
+  },
+  {
+    id: "outdated",
+    ext: "OLD",
+    title: "stale audio can't slip out",
+    body: "edit a translation and its old audio is marked outdated while the line returns to pending review.",
+  },
+  {
+    id: "retry",
+    ext: "RETRY",
+    title: "retry one line, not the whole video",
+    body: "if a voice fails to generate, regenerate only that line and keep everything else you've approved.",
+  },
 ];
 
-export const marqueeWords = ["they", "use", "it", "every", "day"];
+export const statement =
+  "dubbing is editing, not magic. DubForge keeps the original line, its translation and the timing side by side, so every line is checked before anything ships.";
 
-// Placeholder testimonials — replace with real ones.
-export const testimonials = [
-  [
-    "alex rivera",
-    "@alex",
-    "this is the first ai thing that actually feels like a tool, not a chat window.",
-    "4/2/26, 9:14 AM",
-  ],
-  [
-    "sam okafor",
-    "@samok",
-    "been screenshotting everything into a chatbot. this is the 10x version.",
-    "4/6/26, 6:12 PM",
-  ],
-  [
-    "jo tanaka",
-    "@jotanaka",
-    "learning my editing app right now with it. so good.",
-    "4/6/26, 5:46 PM",
-  ],
-  [
-    "priya nair",
-    "@priyan",
-    "my favorite onboarding in a long time. so unique and engaging.",
-    "4/27/26, 1:51 PM",
-  ],
-  [
-    "mika lund",
-    "@mikalund",
-    "it pointed at the exact button i was hunting for. tiny thing, huge deal.",
-    "5/1/26, 11:20 AM",
-  ],
-  [
-    "dev patel",
-    "@devp",
-    "asked it to tidy my inbox out loud and it just… did.",
-    "5/3/26, 8:02 PM",
-  ],
-  [
-    "lee chen",
-    "@leechen",
-    "showed my dad. he installed it in two minutes.",
-    "5/9/26, 3:30 PM",
-  ],
-  [
-    "nora blake",
-    "@norab",
-    "the draw-on-screen thing is wild.",
-    "5/12/26, 10:05 AM",
-  ],
-  [
-    "omar haddad",
-    "@omarh",
-    "feels like having a patient friend sitting next to me.",
-    "5/20/26, 7:44 PM",
-  ],
-  [
-    "ines costa",
-    "@inesc",
-    "finally an ai interface i don’t have to type into.",
-    "5/22/26, 2:18 PM",
-  ],
-  [
-    "kai morgan",
-    "@kaim",
-    "replaced three tutorials for me this week.",
-    "5/28/26, 9:50 AM",
-  ],
-  [
-    "zoe wright",
-    "@zoew",
-    "privacy approach is exactly what i wanted.",
-    "6/1/26, 12:31 PM",
-  ],
-].map(([name, handle, text, date]) => ({ name, handle, text, date }));
-
-export const plans = [
-  {
-    name: "free",
-    blurb: "best for trying it out",
-    monthly: 0,
-    yearly: 0,
-    note: "free forever, no card needed",
-    cta: "start free",
-    variant: "secondary",
-    includes: [
-      "25 talk messages a month",
-      "plenty of dictation",
-      "25 agent messages a month",
-    ],
-  },
-  {
-    name: "pro",
-    blurb: "best for everyday use",
-    monthly: 20,
-    yearly: 16,
-    popular: true,
-    cta: "get pro",
-    variant: "primary",
-    includes: [
-      "unlimited talk",
-      "unlimited dictation",
-      "150 agent messages a month",
-    ],
-  },
-  {
-    name: "max",
-    blurb: "best for power users",
-    monthly: 100,
-    yearly: 80,
-    cta: "get max",
-    variant: "secondary",
-    includes: [
-      "unlimited talk",
-      "unlimited dictation",
-      "1,000 agent messages a month",
-    ],
-  },
+export const todayFacts = [
+  ["source language", "English"],
+  ["dub into", "Hindi or Bengali"],
+  ["voices", "Edge TTS or Meta MMS-TTS"],
+  ["review", "approve, request changes, regenerate per line"],
+  ["export", "MP4, MP3, SRT and VTT"],
 ];
 
 export const faqs = [
   [
     "what is DubForge?",
-    "DubForge is a browser workspace for translating, reviewing, dubbing, and exporting video dialogue without losing the context of the original cut.",
+    "a workspace for dubbing video into another language. you upload a video, get a timed transcript, a translation and a dubbed voice for every line, review them, then export.",
   ],
   [
-    "does it work in the browser?",
-    "yes. the workspace is designed to run in the browser, so your team can review the same project without installing a desktop app.",
+    "which languages work today?",
+    "the source audio is English, and you can dub into Hindi or Bengali. each project translates into one target language.",
   ],
   [
-    "can we review translations together?",
-    "yes. each project keeps the source line, localized line, speaker context, and review state together.",
+    "what runs under the hood?",
+    "faster-whisper (or AssemblyAI, if you add a key) for transcription, Meta's NLLB-200 for translation, and Edge TTS or Meta's MMS-TTS models for the voices. FFmpeg handles the audio and video.",
   ],
   [
-    "what does DubForge preserve?",
-    "timing, speaker intent, scene context, and the character of the original performance stay visible throughout the workflow.",
+    "does it clone the original speaker's voice?",
+    "no. lines are spoken by stock text-to-speech voices. DubForge checks timing, not vocal likeness.",
   ],
   [
-    "which languages are supported?",
-    "language availability depends on the configured project voices and translation services. DubForge keeps the workflow ready for multilingual delivery.",
+    "what happens when a dubbed line runs long?",
+    "it's flagged as a duration mismatch when the clip is more than 300 ms or 15% off the original line, whichever allowance is larger. edit the line or regenerate its audio, then review it again.",
   ],
   [
-    "can we export approved work?",
-    "yes. once the project is reviewed, approved deliverables can be exported from the workspace.",
+    "what can i export?",
+    "SRT and VTT subtitles are available as soon as a project has segments. MP3 audio and the MP4 with the dubbed track unlock once every line is approved and has usable audio.",
   ],
   [
-    "do i need to install anything?",
-    "no. DubForge is built as a web workspace, so there is no downloadable app requirement.",
+    "can i use the dubbed audio commercially?",
+    "check first. DubForge is an MVP: the Edge TTS option uses an unofficial service meant for demos, and MMS-TTS has its own license terms. review the license of the voice you use before publishing.",
   ],
   [
-    "is there a free way to try it?",
-    "the workspace can be explored with a starter project before you commit to a plan.",
+    "can a team review together?",
+    "not yet. this version has no user accounts or roles, just projects, their lines and review states.",
   ],
   [
-    "can i invite collaborators?",
-    "yes. projects are structured for a shared review process across editors, translators, and producers.",
+    "how much does it cost?",
+    "there is no pricing yet. DubForge is in early access.",
   ],
-  ["can i cancel anytime?", "yes. plans are month-to-month with no lock-in."],
 ].map(([q, a]) => ({ q, a }));
 
 export const footerColumns = [
   {
-    title: "product",
+    title: "explore",
     links: [
-      ["features", "#feat"],
-      ["pricing", "#pr"],
-      ["changelog", "#"],
-      ["try it", "#"],
+      ["how it works", "#how"],
+      ["review pass", "#review"],
+      ["early access", "#start"],
+      ["faq", "#faq"],
     ],
   },
   {
-    title: "resources",
-    links: [
-      ["trust", "#"],
-      ["privacy", "#"],
-      ["referrals", "#"],
-      ["support", "#"],
-    ],
+    title: "try it",
+    links: [["open workspace", "/app"]],
   },
-  {
-    title: "connect",
-    links: [
-      ["instagram", "#"],
-      ["x (twitter)", "#"],
-      ["linkedin", "#"],
-      ["youtube", "#"],
-    ],
-  },
+];
+
+// Open-source and third-party pieces the pipeline is built on (plain credits, no links).
+export const builtWith = [
+  "faster-whisper",
+  "AssemblyAI",
+  "NLLB-200",
+  "Edge TTS",
+  "MMS-TTS",
+  "FFmpeg",
 ];

@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 
 // The language the hero desk is localized into. Lives outside React so the nav's
 // language chip and the hero stay in sync without prop drilling.
-let lang = "es";
+let lang = "hi";
 const listeners = new Set();
 
 const subscribe = (fn) => {

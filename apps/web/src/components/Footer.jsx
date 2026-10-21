@@ -1,4 +1,4 @@
-import { brand, footerColumns } from "../data/content.js";
+import { brand, builtWith, footerColumns } from "../data/content.js";
 import "./Footer.css";
 
 export default function Footer() {
@@ -16,15 +16,23 @@ export default function Footer() {
           </div>
         ))}
         <div>
-          <h6>disclaimer</h6>
+          <h6>built with</h6>
+          <ul className="built">
+            {builtWith.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h6>status</h6>
           <p>
-            *{brand} only sees your screen when you press the hotkey.
-            screenshots are never stored.
+            early access. no accounts, plans or public pricing yet, and the
+            supported languages are English to Hindi and Bengali.
           </p>
         </div>
       </div>
       <div className="wordmark">{brand}</div>
-      <div className="copy-line">© Your Company, Inc.</div>
+      <div className="copy-line">© 2026 {brand}</div>
     </footer>
   );
 }

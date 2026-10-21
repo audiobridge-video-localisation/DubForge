@@ -1,35 +1,20 @@
-// Languages the hero desk (and the nav's language chip) can localize into.
+// Target languages the pipeline supports today: English -> Hindi or Bengali
+// (NLLB translation + Edge TTS / MMS-TTS voices).
 export const langs = {
-  es: {
-    name: "Spanish",
-    code: "ES",
-    folder: "es-ES",
-    hello: "¡hola!",
+  hi: {
+    name: "Hindi",
+    code: "HI",
+    folder: "hi-IN",
+    hello: "नमस्ते",
     color: "#f6c2ae",
     deep: "#e58a6b",
   },
-  fr: {
-    name: "French",
-    code: "FR",
-    folder: "fr-FR",
-    hello: "salut !",
+  bn: {
+    name: "Bengali",
+    code: "BN",
+    folder: "bn-IN",
+    hello: "নমস্কার",
     color: "#f4bfc4",
     deep: "#e48e98",
-  },
-  de: {
-    name: "German",
-    code: "DE",
-    folder: "de-DE",
-    hello: "hallo!",
-    color: "#cde9f5",
-    deep: "#3f87ab",
-  },
-  ja: {
-    name: "Japanese",
-    code: "JA",
-    folder: "ja-JP",
-    hello: "こんにちは",
-    color: "#d3c5f0",
-    deep: "#a58bd0",
   },
 };

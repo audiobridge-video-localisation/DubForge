@@ -174,10 +174,18 @@
     gap: 12px;
     padding: 0 18px;
   }
+  .menu-items a:not(.brand) {
+    display: none;
+  }
+  .menu-items .brand {
+    margin-right: 0;
+  }
   .menubar .logo-link {
     display: none;
   }
   .menubar .getbtn {
+    padding: 0 14px 1px;
+    font-size: 13px;
     white-space: nowrap;
   }
 }

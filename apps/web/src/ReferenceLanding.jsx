@@ -1,9 +1,9 @@
 import MenuBar from "./components/MenuBar.jsx";
 import Hero from "./components/Hero.jsx";
-import Features from "./components/Features.jsx";
-import Manifesto from "./components/Manifesto.jsx";
-import Feedback from "./components/Feedback.jsx";
-import Pricing from "./components/Pricing.jsx";
+import Pipeline from "./components/Pipeline.jsx";
+import ReviewPass from "./components/ReviewPass.jsx";
+import Statement from "./components/Statement.jsx";
+import EarlyAccess from "./components/EarlyAccess.jsx";
 import Faq from "./components/Faq.jsx";
 import Footer from "./components/Footer.jsx";
 
@@ -13,10 +13,10 @@ export default function App() {
       <MenuBar />
       <main>
         <Hero />
-        <Features />
-        <Manifesto />
-        <Feedback />
-        <Pricing />
+        <Pipeline />
+        <ReviewPass />
+        <Statement />
+        <EarlyAccess />
         <Faq />
       </main>
       <Footer />
