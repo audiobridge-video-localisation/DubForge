@@ -21,7 +21,7 @@
       rgba(255, 255, 255, 0.55),
       transparent 70%
     ),
-    linear-gradient(180deg, #b6d7c0, #cfe6d4 55%, #e6f1e5);
+    linear-gradient(180deg, #b4dcec, #cfe9f3 55%, #e8f4fa);
 }
 .pr .plabel {
   background: rgba(255, 255, 255, 0.55);
@@ -36,7 +36,7 @@
 }
 .pr .sec-title {
   margin-top: 18px;
-  font-size: 52px;
+  font-size: 42px;
 }
 
 .toggle {
@@ -101,7 +101,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: -0.2px;
-  background: var(--terra);
+  background: var(--peach);
   border: 1px solid #15171c;
 }
 .plan h4 {
@@ -183,7 +183,7 @@
   margin-right: 9px;
   vertical-align: -2px;
   border-radius: 50%;
-  background: var(--terra);
+  background: var(--peach);
   border: 1px solid #15171c;
 }
 

@@ -29,11 +29,11 @@
 }
 .btn.primary {
   color: var(--edge);
-  background: var(--sage);
+  background: var(--glacier);
   border: 1.5px solid var(--edge);
 }
 .btn.secondary {
-  background: #fffefb;
+  background: #fdfdfe;
   border: 1.5px solid var(--edge);
 }
 .btn.primary,

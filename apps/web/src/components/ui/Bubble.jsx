@@ -43,9 +43,9 @@ export default function Bubble({ phrases }) {
       >
         <defs>
           <linearGradient id={`f${id}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#f1f5ee" />
-            <stop offset=".42" stopColor="#bcd1bf" />
-            <stop offset="1" stopColor="#e3ede2" />
+            <stop offset="0" stopColor="#eef7fb" />
+            <stop offset=".42" stopColor="#b9dbe9" />
+            <stop offset="1" stopColor="#e1f0f6" />
           </linearGradient>
           <linearGradient id={`s${id}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#15171c" />

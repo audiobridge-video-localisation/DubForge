@@ -7,9 +7,10 @@
   width: 100%;
   margin-top: 26px;
   overflow: hidden;
-  font-size: 56px;
-  font-weight: 500;
-  letter-spacing: -1.68px;
+  font-family: var(--display);
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
   line-height: 1.2;
   -webkit-mask-image: linear-gradient(
     90deg,
@@ -115,7 +116,7 @@
   color: var(--faint);
 }
 .tint-a .tb {
-  background: #dff0ee;
+  background: #dcecf5;
 }
 .tint-b .tb {
   background: #f6e4e4;
@@ -124,7 +125,7 @@
   background: #e7e4f6;
 }
 .tint-d .tb {
-  background: #f6f0dc;
+  background: #fde9df;
 }
 
 .banner {

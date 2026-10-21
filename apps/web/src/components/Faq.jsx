@@ -5,7 +5,7 @@ import "./Faq.css";
 export default function Faq() {
   const [open, setOpen] = useState(0); // one answer open at a time
   return (
-    <section className="faq">
+    <section className="faq" id="faq">
       <h2 className="sec-title">frequently asked questions</h2>
       <p className="sec-sub">
         what to know about the DubForge workflow and getting started.

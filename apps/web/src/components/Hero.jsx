@@ -2,39 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import DeskWindow from "./ui/DeskWindow.jsx";
 import Button from "./ui/Button.jsx";
 import Draggable from "./ui/Draggable.jsx";
+import { langs } from "../data/langs.js";
+import {
+  onDubRequest,
+  setDeskLang,
+  useDeskLang,
+} from "../hooks/useDeskLang.js";
 import "./Hero.css";
 
 // Drop scene-04.mov on a folder and the whole desk re-localizes.
-const langs = {
-  es: {
-    name: "Spanish",
-    code: "ES",
-    folder: "es-ES",
-    hello: "¡hola!",
-    color: "#e8845f",
-  },
-  fr: {
-    name: "French",
-    code: "FR",
-    folder: "fr-FR",
-    hello: "salut !",
-    color: "#e9a3a0",
-  },
-  de: {
-    name: "German",
-    code: "DE",
-    folder: "de-DE",
-    hello: "hallo!",
-    color: "#9bc09a",
-  },
-  ja: {
-    name: "Japanese",
-    code: "JA",
-    folder: "ja-JP",
-    hello: "こんにちは",
-    color: "#b79fcf",
-  },
-};
 const rows = [
   [
     "Sophia",
@@ -319,7 +295,7 @@ export default function Hero() {
   const [phase, setPhase] = useState(0);
   const [visible, setVisible] = useState(false);
   const [playing, setPlaying] = useState(true);
-  const [lang, setLang] = useState("es");
+  const lang = useDeskLang();
   const [busy, setBusy] = useState(null);
   const [over, setOver] = useState(null);
   const [reduced, setReduced] = useState(
@@ -378,7 +354,7 @@ export default function Hero() {
     setBusy(next);
     dubTimer.current = globalThis.setTimeout(
       () => {
-        setLang(next);
+        setDeskLang(next);
         setBusy(null);
         setPhase(1);
         setPlaying(true);
@@ -386,6 +362,11 @@ export default function Hero() {
       reduced ? 0 : 900,
     );
   };
+  const dubRef = useRef(dub);
+  useEffect(() => {
+    dubRef.current = dub;
+  });
+  useEffect(() => onDubRequest((next) => dubRef.current(next)), []);
   const fileAway = (el, x, y) => {
     el.style.transition = reduced
       ? "none"
@@ -532,7 +513,7 @@ export default function Hero() {
   return (
     <section
       ref={section}
-      style={{ "--lang": l.color }}
+      style={{ "--lang": l.color, "--lang-deep": l.deep }}
       className={`hero ${visible ? "in-view" : ""} ${running ? "demo-running" : ""} ${running && phase === 2 ? "audio-playing" : ""}`}
     >
       <div className="canvas">
@@ -581,7 +562,9 @@ export default function Hero() {
 
         <div className="hero-heading">
           <h1>DubForge</h1>
-          <p>localize every voice, without losing the feeling</p>
+          <p>
+            localize every voice, without losing the <em>feeling</em>
+          </p>
           <div className="ctas">
             <Button variant="primary" href="/app">
               open workspace

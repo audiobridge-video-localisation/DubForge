@@ -5,10 +5,12 @@
   --faint: rgba(0, 0, 0, 0.3);
   --blue: #0f7fff;
   --edge: #15171c;
-  --paper: #f6f2ea;
-  --sage: #b9d8c2;
-  --sage-deep: #6f9a80;
-  --terra: #d9694a;
+  --paper: #f7f8fa;
+  --glacier: #bfe2f0;
+  --glacier-deep: #3f87ab;
+  --display: Fraunces, Georgia, "Times New Roman", serif;
+  --peach: #f6c2ae;
+  --peach-deep: #e58a6b;
   --accent: #b9472b;
   --silver: linear-gradient(#fbfbfb 0%, #ededed 42%, #e4e4e4 100%);
 }
@@ -40,6 +42,20 @@ a {
   --bg: var(--paper);
   background: var(--bg);
 }
+.landing [id] {
+  scroll-margin-top: 64px;
+}
+
+/* Fraunces: soft, wonky cut for display type */
+.sec-title,
+.marquee,
+.hero-heading h1,
+.hero-heading em,
+.sticker-hello {
+  font-variation-settings:
+    "SOFT" 100,
+    "WONK" 1;
+}
 
 /* shared section bits */
 .plabel {
@@ -58,9 +74,10 @@ a {
 .sec-title {
   margin: 0;
   text-align: center;
-  font-weight: 500;
-  font-size: 44px;
-  letter-spacing: -1.3px;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 38px;
+  letter-spacing: -0.02em;
   line-height: 1.1;
 }
 .sec-sub {

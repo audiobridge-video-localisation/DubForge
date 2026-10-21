@@ -4,7 +4,7 @@
   overflow: hidden;
   display: grid;
   place-items: center;
-  background: #dfe9dc;
+  background: #dcebf3;
 }
 .man .arches {
   position: absolute;
@@ -16,7 +16,7 @@
       #f4b9a0 28%,
       transparent 60%
     ),
-    linear-gradient(180deg, #cfe3d3 0%, #e6efe0 46%, #f4c7b0 100%);
+    linear-gradient(180deg, #c8e4f0 0%, #e6f1f6 46%, #f4c7b0 100%);
 }
 .man .arches::before {
   content: "";
@@ -64,7 +64,7 @@
 }
 .notes .paper {
   padding: 30px 34px 26px;
-  background: #f8f3e8;
+  background: #fcfcfd;
   border-radius: 4.5px;
   font-size: 21px;
   line-height: 1.3;
