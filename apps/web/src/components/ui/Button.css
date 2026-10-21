@@ -28,18 +28,28 @@
   pointer-events: none;
 }
 .btn.primary {
-  background: var(--aqua);
-  border: 1px solid #221898;
+  color: var(--edge);
+  background: var(--sage);
+  border: 1.5px solid var(--edge);
 }
 .btn.secondary {
-  background: var(--silver);
-  border: 1px solid #626262;
+  background: #fffefb;
+  border: 1.5px solid var(--edge);
+}
+.btn.primary,
+.btn.secondary {
+  box-shadow: 3px 3px 0 var(--edge);
+}
+.btn::after {
+  display: none;
 }
 .btn:hover {
-  opacity: 0.8;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--edge);
 }
 .btn:active {
-  transform: scale(0.97);
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--edge);
 }
 .btn svg {
   width: 20px;

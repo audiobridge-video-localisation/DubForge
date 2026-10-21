@@ -3,7 +3,7 @@
   padding: 110px 24px 120px;
   overflow: hidden;
   text-align: center;
-  color: #fff;
+  color: #15171c;
   border-radius: 28px 28px 0 0;
   background:
     radial-gradient(
@@ -21,18 +21,18 @@
       rgba(255, 255, 255, 0.55),
       transparent 70%
     ),
-    linear-gradient(180deg, #2f6fe4, #5a9bf5 55%, #8fbdf9);
+    linear-gradient(180deg, #b6d7c0, #cfe6d4 55%, #e6f1e5);
 }
 .pr .plabel {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.6);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(21, 23, 28, 0.22);
+  color: #15171c;
   text-shadow: none;
 }
 .pr .sec-title,
 .pr .sec-sub {
-  color: #fff;
-  text-shadow: 0 2px 12px rgba(10, 40, 120, 0.35);
+  color: #15171c;
+  text-shadow: none;
 }
 .pr .sec-title {
   margin-top: 18px;
@@ -44,8 +44,8 @@
   margin-top: 26px;
   padding: 3px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(21, 23, 28, 0.2);
   backdrop-filter: blur(8px);
 }
 .toggle button {
@@ -54,7 +54,7 @@
   padding: 8px 18px;
   border-radius: 999px;
   font-size: 15px;
-  color: #fff;
+  color: #15171c;
   letter-spacing: -0.45px;
   transition:
     background 0.2s,
@@ -101,8 +101,8 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: -0.2px;
-  background: var(--aqua);
-  border: 1px solid #221898;
+  background: var(--terra);
+  border: 1px solid #15171c;
 }
 .plan h4 {
   margin: 0;
@@ -183,8 +183,8 @@
   margin-right: 9px;
   vertical-align: -2px;
   border-radius: 50%;
-  background: var(--aqua);
-  border: 1px solid #221898;
+  background: var(--terra);
+  border: 1px solid #15171c;
 }
 
 .student {

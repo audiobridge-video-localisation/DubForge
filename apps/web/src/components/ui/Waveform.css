@@ -14,5 +14,5 @@
   transition: background 0.3s;
 }
 .wbars.live i {
-  background: var(--blue);
+  background: var(--accent);
 }

@@ -11,6 +11,7 @@ export default function Draggable({
   style,
   children,
   onPositionChange,
+  onDrop,
   interactionProps,
 }) {
   const el = useRef(null);
@@ -41,12 +42,13 @@ export default function Draggable({
     const y = d.oy + (e.clientY - d.sy) / d.scale;
     el.current.style.left = `${x}px`;
     el.current.style.top = `${y}px`;
-    onPositionChange?.({ x, y });
+    onPositionChange?.({ x, y }, el.current);
   };
   const onUp = (e) => {
     if (drag.current?.id !== e.pointerId) return;
     drag.current = null;
     el.current.classList.remove("dragging");
+    onDrop?.(el.current);
   };
 
   return (

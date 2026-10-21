@@ -4,7 +4,7 @@
   overflow: hidden;
   display: grid;
   place-items: center;
-  background: #1c2b3a;
+  background: #dfe9dc;
 }
 .man .arches {
   position: absolute;
@@ -12,11 +12,11 @@
   background:
     radial-gradient(
       120% 90% at 50% 120%,
-      #f6d29a 0%,
-      #d98a6a 28%,
+      #fbe3d3 0%,
+      #f4b9a0 28%,
       transparent 60%
     ),
-    linear-gradient(180deg, #1a2a44 0%, #35507a 45%, #c47e67 100%);
+    linear-gradient(180deg, #cfe3d3 0%, #e6efe0 46%, #f4c7b0 100%);
 }
 .man .arches::before {
   content: "";
@@ -24,7 +24,7 @@
   inset: 0;
   background: repeating-radial-gradient(
     ellipse at 50% 120%,
-    rgba(255, 255, 255, 0.07) 0 60px,
+    rgba(255, 255, 255, 0.4) 0 60px,
     transparent 60px 120px
   );
 }
@@ -32,7 +32,7 @@
   position: absolute;
   inset: 0;
   mix-blend-mode: hue;
-  opacity: 0.55;
+  opacity: 0.1;
   pointer-events: none;
   background: linear-gradient(
     90deg,
@@ -64,7 +64,7 @@
 }
 .notes .paper {
   padding: 30px 34px 26px;
-  background: #fff8d8;
+  background: #f8f3e8;
   border-radius: 4.5px;
   font-size: 21px;
   line-height: 1.3;

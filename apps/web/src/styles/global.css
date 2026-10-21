@@ -4,13 +4,12 @@
   --muted: rgba(0, 0, 0, 0.55);
   --faint: rgba(0, 0, 0, 0.3);
   --blue: #0f7fff;
-  --aqua: linear-gradient(
-    #edf4ff 0%,
-    #d6e7ff 18%,
-    #a2c7ff 50%,
-    #99cbf8 80%,
-    #a2d2f7 100%
-  );
+  --edge: #15171c;
+  --paper: #f6f2ea;
+  --sage: #b9d8c2;
+  --sage-deep: #6f9a80;
+  --terra: #d9694a;
+  --accent: #b9472b;
   --silver: linear-gradient(#fbfbfb 0%, #ededed 42%, #e4e4e4 100%);
 }
 * {
@@ -34,6 +33,12 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* landing page: warm paper ground */
+.landing {
+  --bg: var(--paper);
+  background: var(--bg);
 }
 
 /* shared section bits */

@@ -38,7 +38,7 @@
   color: var(--faint);
 }
 
-/* big wordmark filled with a tiled blue pattern */
+/* big wordmark filled with a tiled warm pattern */
 .wordmark {
   margin: 30px 0 0;
   padding-bottom: 0.02em;
@@ -60,7 +60,7 @@
       rgba(255, 255, 255, 0.55) 0 2px,
       transparent 2px 34px
     ),
-    linear-gradient(#a8d6fb, #5eaee9);
+    linear-gradient(#d3ebd9, #8fbfa0);
   -webkit-background-clip: text;
   background-clip: text;
 }

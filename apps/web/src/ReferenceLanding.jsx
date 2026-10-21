@@ -9,7 +9,7 @@ import Footer from "./components/Footer.jsx";
 
 export default function App() {
   return (
-    <>
+    <div className="landing">
       <MenuBar />
       <main>
         <Hero />
@@ -20,6 +20,6 @@ export default function App() {
         <Faq />
       </main>
       <Footer />
-    </>
+    </div>
   );
 }
