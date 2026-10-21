@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import MacWindow from "./ui/MacWindow.jsx";
+import Button from "./ui/Button.jsx";
 import Draggable from "./ui/Draggable.jsx";
 import "./Hero.css";
 
@@ -21,12 +22,37 @@ const rows = [
     "Pero siempre se siente como casa para mí.",
   ],
 ];
-const initial = [
-  { x: 30, y: 110 },
-  { x: 1130, y: 130 },
-  { x: 32, y: 490 },
-  { x: 1190, y: 590 },
-  { x: 235, y: 460 },
+
+// Everything is placed on a fixed 1440px canvas.
+const trinkets = [
+  {
+    type: "tag",
+    tone: "blue",
+    hello: ["HOLA", "me llamo"],
+    name: "Sophia",
+    x: 395,
+    y: 28,
+    rot: 4,
+  },
+  {
+    type: "tag",
+    tone: "red",
+    hello: ["BONJOUR", "je m'appelle"],
+    name: "Marcus",
+    x: 1245,
+    y: 150,
+    rot: -7,
+  },
+  { type: "kao", text: "\\(^o^)/", x: 385, y: 135, rot: -8, size: 26 },
+  { type: "kao", text: "♪ ~(˘▾˘~)", x: 790, y: 95, rot: 6, size: 20 },
+  { type: "kao", text: "{ ^‿^ }", x: 1110, y: 395, rot: 7, size: 24 },
+  { type: "kao", text: "(¬‿¬)", x: 365, y: 455, rot: -7, size: 20 },
+  { type: "folder", label: "es-ES", x: 378, y: 255 },
+  { type: "folder", label: "de-DE", x: 1130, y: 262 },
+  { type: "folder", label: "ja-JP", x: 1110, y: 478 },
+  { type: "tile", kind: "translate", x: 845, y: 150, rot: -4 },
+  { type: "tile", kind: "mic", x: 120, y: 640, rot: -6 },
+  { type: "note", text: "keep the timing natural", x: 1205, y: 625, rot: 5 },
 ];
 
 function Wave({ purple = false }) {
@@ -45,9 +71,50 @@ function Wave({ purple = false }) {
   );
 }
 
-function Workspace({ phase, focus, running, onReplay, onPause }) {
+function Trinket({ item }) {
   return (
-    <div className={`studio-preview phase-${phase} focus-${focus}`}>
+    <>
+      {item.type === "tag" && (
+        <div className={`tag ${item.tone}`}>
+          <div className="hd">
+            {item.hello[0]}
+            <br />
+            {item.hello[1]}
+          </div>
+          <div className="nm">{item.name}</div>
+        </div>
+      )}
+      {item.type === "kao" && (
+        <div className="kao" style={{ fontSize: item.size }}>
+          {item.text}
+        </div>
+      )}
+      {item.type === "folder" && (
+        <div className="folder-wrap">
+          <div className="folder" />
+          <span>{item.label}</span>
+        </div>
+      )}
+      {item.type === "tile" && (
+        <div className={`tile tile-${item.kind}`}>
+          {item.kind === "translate" ? (
+            <>
+              <b>文</b>
+              <i>A</i>
+            </>
+          ) : (
+            <span>♪</span>
+          )}
+        </div>
+      )}
+      {item.type === "note" && <div className="note-sticky">{item.text}</div>}
+    </>
+  );
+}
+
+function Workspace({ phase, running, onReplay, onPause }) {
+  return (
+    <div className={`studio-preview phase-${phase}`}>
       <aside className="studio-sidebar">
         <small>PROJECT</small>
         <strong>A brighter tomorrow</strong>
@@ -66,7 +133,7 @@ function Workspace({ phase, focus, running, onReplay, onPause }) {
             </div>
           ))}
         </div>
-        <span className="studio-demo">Demo project · drag to explore</span>
+        <span className="studio-demo">Demo project</span>
       </aside>
       <div className="studio-editor">
         <div className="studio-steps">
@@ -173,16 +240,14 @@ function Workspace({ phase, focus, running, onReplay, onPause }) {
 
 export default function Hero() {
   const section = useRef(null);
-  const [positions, setPositions] = useState(initial);
-  const [focus, setFocus] = useState(-1);
   const [phase, setPhase] = useState(0);
   const [visible, setVisible] = useState(false);
   const [playing, setPlaying] = useState(true);
-  const [layoutKey, setLayoutKey] = useState(0);
   const [reduced, setReduced] = useState(
     () => globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const running = visible && playing && phase < 4 && !reduced;
+  const shown = reduced ? 4 : phase;
   useEffect(() => {
     const media = globalThis.matchMedia("(prefers-reduced-motion: reduce)");
     const change = () => setReduced(media.matches);
@@ -209,165 +274,165 @@ export default function Hero() {
     setPhase(0);
     setPlaying(true);
   };
-  const update = (i) => (position) =>
-    setPositions((old) => old.map((p, index) => (index === i ? position : p)));
-  const cards = [
-    <>
-      <div className="artifact-label">
-        <span>SCENE 04</span>
-        <span>ORIGINAL</span>
-      </div>
-      <div className="scene-art">
-        <div className="scene-sun" />
-        <div className="scene-mountain back" />
-        <div className="scene-mountain" />
-        <span>
-          Same story.
-          <br />A new audience.
-        </span>
-      </div>
-      <div className="scene-caption">
-        <span>▶ A brighter tomorrow</span>
-        <span>00:28</span>
-      </div>
-    </>,
-    <>
-      <div className="artifact-label">
-        <span>SOURCE AUDIO</span>
-        <span>A001_C004.wav</span>
-      </div>
-      <Wave />
-      <div className="artifact-foot">
-        <span>00:00</span>
-        <span>00:28</span>
-      </div>
-    </>,
-    <>
-      <div className="artifact-label">
-        <span>EN → ES</span>
-        <span>SUBTITLE PROOF</span>
-      </div>
-      <div className="proof">
-        <small>EN · 00:00 – 00:03</small>
-        <p>It still feels like yesterday.</p>
-      </div>
-      <div className="proof-arrow">↓</div>
-      <div className="proof">
-        <small>ES · 00:00 – 00:03</small>
-        <p>Todavía se siente como ayer.</p>
-      </div>
-    </>,
-    <>
-      <div className="artifact-label">
-        <span>VOICE MATCH</span>
-        <span>PREVIEW</span>
-      </div>
-      <Wave purple />
-      <div className="voice-approved">
-        <b>✓</b>
-        <div>
-          Keep the original feeling<small>Tone · rhythm · pacing</small>
+
+  // Small windows, each a little DubForge file with its name underneath.
+  const clips = [
+    {
+      file: "scene-04.mov",
+      x: 60,
+      y: 80,
+      w: 270,
+      body: (
+        <div className="mini-video">
+          <img
+            src="/assets/scene-04-landscape.jpg"
+            alt="An alpine lake beneath misty mountains, a sample scene for localization"
+            width="800"
+            height="533"
+            draggable="false"
+          />
+          <span className="mini-chip">EN → ES</span>
+          <span className="mini-sub">Todavía se siente como ayer.</span>
         </div>
-      </div>
-    </>,
+      ),
+    },
+    {
+      file: "transcript.txt",
+      x: 520,
+      y: 40,
+      w: 235,
+      body: (
+        <div className="mini-text">
+          <p>
+            <time>00:00</time> <b>SOPHIA</b>
+            <br />
+            It still feels like yesterday.
+          </p>
+          <p>
+            <time>00:04</time> <b>MARCUS</b>
+            <br />A city that changes in quiet ways.
+          </p>
+        </div>
+      ),
+    },
+    {
+      file: "sophia-es.wav",
+      x: 1000,
+      y: 70,
+      w: 255,
+      body: (
+        <div className="mini-wave">
+          <Wave />
+          <span>
+            <b>ES</b> voice matched · 00:28
+          </span>
+        </div>
+      ),
+    },
+    {
+      file: "approve-all.app",
+      x: 70,
+      y: 395,
+      w: 270,
+      body: (
+        <div className="mini-dialog">
+          <span className="dialog-icon" aria-hidden="true">
+            ✓
+          </span>
+          <div>
+            <strong>
+              {shown >= 3 ? "All 4 lines approved" : "Approve 4 lines?"}
+            </strong>
+            <small>Export unlocks once every line is approved.</small>
+            <div className="dialog-actions">
+              <span>Review</span>
+              <span className="go">{shown >= 3 ? "Approved" : "Approve"}</span>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      file: "es-ES / export",
+      x: 1195,
+      y: 355,
+      w: 215,
+      body: (
+        <div className="mini-files">
+          {[
+            ["MP4", "dubbed.mp4"],
+            ["MP3", "dubbed.mp3"],
+            ["SRT", "subtitles.srt"],
+            ["VTT", "captions.vtt"],
+          ].map(([ext, name]) => (
+            <div key={ext}>
+              <span className={`format-icon format-${ext.toLowerCase()}`}>
+                {ext}
+              </span>
+              {name}
+            </div>
+          ))}
+        </div>
+      ),
+    },
   ];
+
   return (
     <section
       ref={section}
       className={`hero ${visible ? "in-view" : ""} ${running ? "demo-running" : ""} ${running && phase === 2 ? "audio-playing" : ""}`}
     >
       <div className="canvas">
-        <svg className="board-wires" viewBox="0 0 1440 1140" aria-hidden="true">
-          {positions.slice(0, 4).map((p, i) => {
-            const endX = positions[4].x + (i % 2 ? 960 : 0);
-            const endY = positions[4].y + (i < 2 ? 70 : 300);
-            const startX = p.x + (i % 2 ? 0 : 240);
-            const startY = p.y + 110;
-            return (
-              <path
-                key={i}
-                className={
-                  focus === i || (running && [0, 2, 3, 3][phase] === i)
-                    ? "wire-active"
-                    : ""
-                }
-                pathLength="1"
-                d={`M${startX},${startY} C${startX},${endY} ${endX},${startY} ${endX},${endY}`}
-              />
-            );
-          })}
-        </svg>
+        {clips.map((clip, i) => (
+          <Draggable
+            key={clip.file}
+            x={clip.x}
+            y={clip.y}
+            className="mini"
+            style={{ width: clip.w, "--i": i }}
+          >
+            <MacWindow>{clip.body}</MacWindow>
+            <div className="cap">{clip.file}</div>
+          </Draggable>
+        ))}
+        {trinkets.map((item, i) => (
+          <Draggable
+            key={i}
+            x={item.x}
+            y={item.y}
+            rot={item.rot}
+            className="trinket"
+            style={{ "--i": i + clips.length }}
+          >
+            <Trinket item={item} />
+          </Draggable>
+        ))}
+
         <div className="hero-heading">
           <h1>DubForge</h1>
           <p>localize every voice, without losing the feeling</p>
-          <a className="hero-open" href="/app">
-            Open workspace <span>↗</span>
-          </a>
+          <div className="ctas">
+            <Button variant="primary" href="/app">
+              open workspace
+            </Button>
+            <Button variant="secondary" href="#feat">
+              see the workflow
+            </Button>
+          </div>
           <small>upload · review · translate · dub · export</small>
         </div>
-        {cards.map((card, i) => (
-          <Draggable
-            key={`${layoutKey}-${i}`}
-            x={initial[i].x}
-            y={initial[i].y}
-            rot={[-5, 5, -5, 5][i]}
-            className={`artifact artifact-${i}`}
-            onPositionChange={update(i)}
-            interactionProps={{
-              tabIndex: 0,
-              "aria-label": [
-                "Original scene card",
-                "Source audio card",
-                "Subtitle translation card",
-                "Voice matching card",
-              ][i],
-              onPointerEnter: () => setFocus(i),
-              onPointerLeave: () => setFocus(-1),
-              onFocus: () => setFocus(i),
-              onBlur: () => setFocus(-1),
-            }}
-          >
-            <span className="artifact-index">{i + 1}</span>
-            {card}
-          </Draggable>
-        ))}
-        <span className="board-annotation">
-          keep the timing
-          <br />
-          natural ↙
-        </span>
-        <Draggable
-          key={`studio-${layoutKey}`}
-          x={initial[4].x}
-          y={initial[4].y}
+
+        <MacWindow
           className="studio-window"
-          onPositionChange={update(4)}
+          title="DubForge / localization desk"
         >
-          <MacWindow title="DubForge / localization desk">
-            <Workspace
-              phase={reduced ? 4 : phase}
-              focus={focus}
-              running={running}
-              onReplay={replay}
-              onPause={() => setPlaying((value) => !value)}
-            />
-          </MacWindow>
-        </Draggable>
-        <div className="board-footer">
-          <span>One story. Every language.</span>
-          <button type="button" onClick={replay}>
-            Replay demo ↻
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPositions(initial);
-              setLayoutKey((value) => value + 1);
-            }}
-          >
-            Reset layout ↺
-          </button>
-        </div>
+          <Workspace
+            phase={shown}
+            running={running}
+            onReplay={replay}
+            onPause={() => setPlaying((value) => !value)}
+          />
+        </MacWindow>
       </div>
     </section>
   );
