@@ -1,0 +1,76 @@
+.faq {
+  padding: 110px 24px 120px;
+}
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 760px;
+  margin: 48px auto 0;
+}
+.qa {
+  overflow: hidden;
+  background: #fdfdfe;
+  border: 1.5px solid rgba(21, 23, 28, 0.16);
+  border-radius: 12px;
+  transition:
+    border-color 250ms,
+    box-shadow 250ms,
+    translate 250ms;
+}
+.qa.open {
+  border-color: var(--edge);
+  box-shadow: 3px 3px 0 var(--edge);
+  translate: -1px -1px;
+}
+.qa button {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 18px 22px;
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.qa button::after {
+  content: "+";
+  color: var(--muted);
+  transition: transform 0.25s;
+}
+.qa.open button::after {
+  transform: rotate(45deg);
+}
+.qa button:focus-visible {
+  outline: 2px solid var(--edge);
+  outline-offset: -4px;
+  border-radius: 10px;
+}
+.qa .a {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s;
+}
+.qa.open .a {
+  grid-template-rows: 1fr;
+}
+.qa .a > div {
+  overflow: hidden;
+}
+.qa .a p {
+  margin: 0;
+  padding: 0 22px 20px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--muted);
+  letter-spacing: -0.02em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qa,
+  .qa .a {
+    transition: none;
+  }
+}

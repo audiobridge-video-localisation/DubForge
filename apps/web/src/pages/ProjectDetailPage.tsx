@@ -179,40 +179,56 @@ function SegmentRow({
   }
 
   return (
-    <li>
-      <span>{REVIEW_STATUS_LABELS[segment.review_status]}</span>{" "}
-      <span>
-        [{formatTimestamp(segment.start_ms)}–{formatTimestamp(segment.end_ms)},
-        duration {formatTimestamp(segment.duration_ms)}]
-      </span>{" "}
-      {isDirty && <span role="status">Unsaved changes</span>}
+    <li className="segment-item">
+      <div className="segment-meta">
+        <span className="status-pill">
+          {REVIEW_STATUS_LABELS[segment.review_status]}
+        </span>{" "}
+        <span>
+          [{formatTimestamp(segment.start_ms)}–{formatTimestamp(segment.end_ms)}
+          , duration {formatTimestamp(segment.duration_ms)}]
+        </span>{" "}
+        {isDirty && <span role="status">Unsaved changes</span>}
+      </div>
       {reviewActionError && <p role="alert">{reviewActionError}</p>}
       {!isEditing ? (
         <>
-          <p>
+          <p className="segment-speaker">
             <strong>{segment.speaker_label}</strong>
           </p>
-          <div style={{ display: "flex", gap: "1rem" }}>
+          <div className="segment-copy">
             <p style={{ flex: 1 }}>{segment.text}</p>
             <p style={{ flex: 1 }}>{segment.translated_text}</p>
           </div>
-          <button type="button" onClick={startEditing}>
-            Edit
-          </button>{" "}
-          <button type="button" onClick={handleApprove}>
-            Approve
-          </button>{" "}
-          <button type="button" onClick={handleRequestChanges}>
-            Request changes
-          </button>{" "}
-          <button
-            type="button"
-            onClick={handleRegenerate}
-            disabled={isArtifactInFlight(segment.artifact)}
-          >
-            Regenerate
-          </button>
+          <div className="segment-actions">
+            <button className="button" type="button" onClick={startEditing}>
+              Edit
+            </button>{" "}
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={handleApprove}
+            >
+              Approve
+            </button>{" "}
+            <button
+              className="button"
+              type="button"
+              onClick={handleRequestChanges}
+            >
+              Request changes
+            </button>{" "}
+            <button
+              className="button"
+              type="button"
+              onClick={handleRegenerate}
+              disabled={isArtifactInFlight(segment.artifact)}
+            >
+              Regenerate
+            </button>
+          </div>
           <p
+            className="segment-audio"
             role={isAudioProblem(segment.audio_status) ? "alert" : undefined}
             style={
               isAudioProblem(segment.audio_status)
@@ -253,14 +269,12 @@ function SegmentRow({
           </label>
           <div style={{ display: "flex", gap: "1rem" }}>
             <textarea
-              style={{ flex: 1 }}
               value={draft.text}
               onChange={(event) =>
                 setDraft({ ...draft, text: event.target.value })
               }
             />
             <textarea
-              style={{ flex: 1 }}
               value={draft.translated_text}
               onChange={(event) =>
                 setDraft({ ...draft, translated_text: event.target.value })
@@ -293,13 +307,19 @@ function SegmentRow({
           {saveError && <p role="alert">{saveError}</p>}
           <div>
             <button
+              className="button button-primary"
               type="button"
               onClick={handleSave}
               disabled={saving || isInvalid}
             >
               {saving ? "Saving…" : "Save"}
             </button>{" "}
-            <button type="button" onClick={cancelEditing} disabled={saving}>
+            <button
+              className="button"
+              type="button"
+              onClick={cancelEditing}
+              disabled={saving}
+            >
               Cancel
             </button>
           </div>
@@ -560,211 +580,243 @@ export function ProjectDetailPage() {
   }
 
   return (
-    <main>
-      <p>
-        <Link to="/">&larr; Back to projects</Link>
-      </p>
+    <main className="project-page">
+      <Link className="back-link" to="/">
+        &larr; Back to projects
+      </Link>
       {loading && <p>Loading project…</p>}
       {error && <p role="alert">{error}</p>}
       {project && (
         <>
-          <h1>{project.name}</h1>
-          <p>Created {new Date(project.created_at).toLocaleString()}</p>
+          <header className="project-header">
+            <div>
+              <span className="eyebrow">dubforge / project</span>
+              <h1>{project.name}</h1>
+              <p>Created {new Date(project.created_at).toLocaleString()}</p>
+            </div>
+          </header>
 
-          <h2>Upload video</h2>
-          <form onSubmit={handleUpload}>
-            <input type="file" name="file" accept="video/*" required />
-            <button type="submit" disabled={uploading}>
-              {uploading ? "Uploading…" : "Upload"}
-            </button>
-          </form>
+          <section className="surface upload-card">
+            <div>
+              <h2>Upload video</h2>
+              <p className="page-subtitle">
+                Add source media to start transcription and translation.
+              </p>
+            </div>
+            <form onSubmit={handleUpload}>
+              <input type="file" name="file" accept="video/*" required />
+              <button
+                className="button button-primary"
+                type="submit"
+                disabled={uploading}
+              >
+                {uploading ? "Uploading…" : "Upload"}
+              </button>
+            </form>
+          </section>
           {uploadError && <p role="alert">{uploadError}</p>}
 
-          <h2>Media</h2>
-          {media.length === 0 && <p>No media uploaded yet.</p>}
-          <ul>
-            {media.map((item) => (
-              <li key={item.media.id}>
-                <strong>{item.media.filename}</strong> — {item.job.status}
-                {isInFlight(item) && (
-                  <progress value={item.job.progress} max={100}>
-                    {item.job.progress}%
-                  </progress>
-                )}
-                {item.job.status === "failed" && (
-                  <>
-                    <p role="alert">{item.job.error_message}</p>
-                    <button
-                      type="button"
-                      onClick={() => handleRetry(item.job.id)}
-                    >
-                      Retry
-                    </button>
-                  </>
-                )}
-                {item.segments.length > 0 && (
-                  <>
-                    <p>
-                      {item.approved_count} / {item.total_count} segments
-                      approved
-                    </p>
-                    <p>
-                      {item.usable_audio_count} / {item.total_count} segments
-                      have usable audio
-                    </p>
-                    {(() => {
-                      const problemSegmentIds = item.segments
-                        .filter((s) => isAudioProblem(s.audio_status))
-                        .map((s) => s.id);
-                      return (
-                        problemSegmentIds.length > 0 && (
+          <section className="media-section">
+            <h2>Media</h2>
+            {media.length === 0 && <p>No media uploaded yet.</p>}
+            <ul>
+              {media.map((item) => (
+                <li className="surface media-card" key={item.media.id}>
+                  <header>
+                    <div>
+                      <h3>{item.media.filename}</h3>
+                      <p>Source media and localization pipeline</p>
+                    </div>
+                    <span className="status-pill">{item.job.status}</span>
+                  </header>
+                  {isInFlight(item) && (
+                    <progress value={item.job.progress} max={100}>
+                      {item.job.progress}%
+                    </progress>
+                  )}
+                  {item.job.status === "failed" && (
+                    <>
+                      <p role="alert">{item.job.error_message}</p>
+                      <button
+                        type="button"
+                        onClick={() => handleRetry(item.job.id)}
+                      >
+                        Retry
+                      </button>
+                    </>
+                  )}
+                  {item.segments.length > 0 && (
+                    <>
+                      <p>
+                        {item.approved_count} / {item.total_count} segments
+                        approved
+                      </p>
+                      <p>
+                        {item.usable_audio_count} / {item.total_count} segments
+                        have usable audio
+                      </p>
+                      {(() => {
+                        const problemSegmentIds = item.segments
+                          .filter((s) => isAudioProblem(s.audio_status))
+                          .map((s) => s.id);
+                        return (
+                          problemSegmentIds.length > 0 && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={batchRegenerating[item.media.id]}
+                                onClick={() =>
+                                  handleRegenerateProblemAudio(
+                                    item.media.id,
+                                    problemSegmentIds,
+                                  )
+                                }
+                              >
+                                {batchRegenerating[item.media.id]
+                                  ? "Regenerating…"
+                                  : `Regenerate problem audio (${problemSegmentIds.length})`}
+                              </button>
+                              {batchRegenerateError[item.media.id] && (
+                                <p role="alert">
+                                  {batchRegenerateError[item.media.id]}
+                                </p>
+                              )}
+                            </>
+                          )
+                        );
+                      })()}
+                      <button
+                        type="button"
+                        disabled={
+                          item.media.ready_for_dubbing ||
+                          item.total_count === 0 ||
+                          item.approved_count !== item.total_count
+                        }
+                        onClick={() => handleReadyForDubbing(item.media.id)}
+                      >
+                        {item.media.ready_for_dubbing
+                          ? "Ready for dubbing"
+                          : "Mark ready for dubbing"}
+                      </button>
+                      {dubbingError[item.media.id] && (
+                        <p role="alert">{dubbingError[item.media.id]}</p>
+                      )}
+
+                      <h3>Export</h3>
+                      <p>
+                        <a href={srtDownloadUrl(item.media.id)}>Download SRT</a>{" "}
+                        <a href={vttDownloadUrl(item.media.id)}>Download VTT</a>
+                      </p>
+                      {(() => {
+                        const voiceProfiles = Array.from(
+                          new Set(
+                            item.segments
+                              .map((s) => s.artifact?.voice_profile)
+                              .filter((v): v is string => Boolean(v)),
+                          ),
+                        );
+                        return (
+                          voiceProfiles.length > 0 && (
+                            <p>Voices used: {voiceProfiles.join(", ")}</p>
+                          )
+                        );
+                      })()}
+                      {(() => {
+                        const dubReady =
+                          item.total_count > 0 &&
+                          item.approved_count === item.total_count &&
+                          item.usable_audio_count === item.total_count;
+                        return (
                           <>
-                            <button
-                              type="button"
-                              disabled={batchRegenerating[item.media.id]}
-                              onClick={() =>
-                                handleRegenerateProblemAudio(
-                                  item.media.id,
-                                  problemSegmentIds,
-                                )
-                              }
-                            >
-                              {batchRegenerating[item.media.id]
-                                ? "Regenerating…"
-                                : `Regenerate problem audio (${problemSegmentIds.length})`}
-                            </button>
-                            {batchRegenerateError[item.media.id] && (
-                              <p role="alert">
-                                {batchRegenerateError[item.media.id]}
+                            {EXPORT_KINDS.map((kind) => {
+                              const job = exportJobs[item.media.id]?.[kind];
+                              return (
+                                <span key={kind}>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      !dubReady || isExportInFlight(job)
+                                    }
+                                    onClick={() =>
+                                      handleExport(item.media.id, kind)
+                                    }
+                                  >
+                                    Export dubbed {kind.toUpperCase()}
+                                  </button>{" "}
+                                </span>
+                              );
+                            })}
+                            {!dubReady && (
+                              <p>
+                                All segments must be approved and have usable
+                                audio before exporting.
                               </p>
                             )}
                           </>
-                        )
-                      );
-                    })()}
-                    <button
-                      type="button"
-                      disabled={
-                        item.media.ready_for_dubbing ||
-                        item.total_count === 0 ||
-                        item.approved_count !== item.total_count
-                      }
-                      onClick={() => handleReadyForDubbing(item.media.id)}
-                    >
-                      {item.media.ready_for_dubbing
-                        ? "Ready for dubbing"
-                        : "Mark ready for dubbing"}
-                    </button>
-                    {dubbingError[item.media.id] && (
-                      <p role="alert">{dubbingError[item.media.id]}</p>
-                    )}
+                        );
+                      })()}
+                      {EXPORT_KINDS.map((kind) => {
+                        const job = exportJobs[item.media.id]?.[kind];
+                        if (!job) return null;
+                        return (
+                          <p key={kind}>
+                            {kind.toUpperCase()}: {job.status}
+                            {isExportInFlight(job) && (
+                              <progress value={job.progress} max={100}>
+                                {job.progress}%
+                              </progress>
+                            )}
+                            {job.status === "completed" && (
+                              <>
+                                {" "}
+                                <a href={exportDownloadUrl(job.id)}>Download</a>
+                              </>
+                            )}
+                            {job.status === "failed" && (
+                              <span role="alert"> {job.error_message}</span>
+                            )}
+                          </p>
+                        );
+                      })}
+                      {exportError[item.media.id] && (
+                        <p role="alert">{exportError[item.media.id]}</p>
+                      )}
 
-                    <h3>Export</h3>
-                    <p>
-                      <a href={srtDownloadUrl(item.media.id)}>Download SRT</a>{" "}
-                      <a href={vttDownloadUrl(item.media.id)}>Download VTT</a>
-                    </p>
-                    {(() => {
-                      const voiceProfiles = Array.from(
-                        new Set(
-                          item.segments
-                            .map((s) => s.artifact?.voice_profile)
-                            .filter((v): v is string => Boolean(v)),
-                        ),
-                      );
-                      return (
-                        voiceProfiles.length > 0 && (
-                          <p>Voices used: {voiceProfiles.join(", ")}</p>
-                        )
-                      );
-                    })()}
-                    {(() => {
-                      const dubReady =
-                        item.total_count > 0 &&
-                        item.approved_count === item.total_count &&
-                        item.usable_audio_count === item.total_count;
-                      return (
-                        <>
-                          {EXPORT_KINDS.map((kind) => {
-                            const job = exportJobs[item.media.id]?.[kind];
-                            return (
-                              <span key={kind}>
-                                <button
-                                  type="button"
-                                  disabled={!dubReady || isExportInFlight(job)}
-                                  onClick={() =>
-                                    handleExport(item.media.id, kind)
-                                  }
-                                >
-                                  Export dubbed {kind.toUpperCase()}
-                                </button>{" "}
-                              </span>
-                            );
-                          })}
-                          {!dubReady && (
-                            <p>
-                              All segments must be approved and have usable
-                              audio before exporting.
-                            </p>
-                          )}
-                        </>
-                      );
-                    })()}
-                    {EXPORT_KINDS.map((kind) => {
-                      const job = exportJobs[item.media.id]?.[kind];
-                      if (!job) return null;
-                      return (
-                        <p key={kind}>
-                          {kind.toUpperCase()}: {job.status}
-                          {isExportInFlight(job) && (
-                            <progress value={job.progress} max={100}>
-                              {job.progress}%
-                            </progress>
-                          )}
-                          {job.status === "completed" && (
-                            <>
-                              {" "}
-                              <a href={exportDownloadUrl(job.id)}>Download</a>
-                            </>
-                          )}
-                          {job.status === "failed" && (
-                            <span role="alert"> {job.error_message}</span>
-                          )}
-                        </p>
-                      );
-                    })}
-                    {exportError[item.media.id] && (
-                      <p role="alert">{exportError[item.media.id]}</p>
-                    )}
-
-                    <ol>
-                      {item.segments.map((segment) => (
-                        <SegmentRow
-                          key={segment.id}
-                          segment={segment}
-                          onSave={(segmentId, patch) =>
-                            handleSegmentSave(item.media.id, segmentId, patch)
-                          }
-                          onApprove={(segmentId) =>
-                            handleSegmentApprove(item.media.id, segmentId)
-                          }
-                          onRequestChanges={(segmentId) =>
-                            handleSegmentRequestChanges(
-                              item.media.id,
-                              segmentId,
-                            )
-                          }
-                          onRegenerate={(segmentId) =>
-                            handleSegmentRegenerate(item.media.id, segmentId)
-                          }
-                        />
-                      ))}
-                    </ol>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
+                      <div className="segments-heading">
+                        <h4>Transcript &amp; translation</h4>
+                        <span className="status-pill">
+                          {item.total_count} segments
+                        </span>
+                      </div>
+                      <ol className="segment-list">
+                        {item.segments.map((segment) => (
+                          <SegmentRow
+                            key={segment.id}
+                            segment={segment}
+                            onSave={(segmentId, patch) =>
+                              handleSegmentSave(item.media.id, segmentId, patch)
+                            }
+                            onApprove={(segmentId) =>
+                              handleSegmentApprove(item.media.id, segmentId)
+                            }
+                            onRequestChanges={(segmentId) =>
+                              handleSegmentRequestChanges(
+                                item.media.id,
+                                segmentId,
+                              )
+                            }
+                            onRegenerate={(segmentId) =>
+                              handleSegmentRegenerate(item.media.id, segmentId)
+                            }
+                          />
+                        ))}
+                      </ol>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
         </>
       )}
     </main>
