@@ -17,6 +17,29 @@ Video localisation SaaS MVP.
 - Docker Desktop (for PostgreSQL and Redis)
 - FFmpeg available on the host when running media tooling locally
 
+## Run everything with Docker (one command)
+
+```bash
+cp .env.example .env      # optional: every setting has a working default
+docker compose up --build
+```
+
+Then open <http://localhost:8080>. That starts Postgres, Redis, the API, the pipeline worker
+and the web app, creates the database tables, and waits for each service to be healthy
+before starting the next. Stop with `Ctrl+C`; start it again later with `docker compose up`.
+
+- **Web app:** <http://localhost:8080> (set `WEB_PORT` to change it). It serves the built
+  frontend and proxies `/api` to the API, so there is nothing else to configure.
+- **API (direct):** <http://localhost:8001/docs>, localhost only (`API_PORT`).
+- **Postgres and Redis** are not published to your machine, so they cannot clash with a
+  database or Redis you already run. Data lives in Docker volumes and survives restarts;
+  `docker compose down -v` deletes it.
+- **Providers** default to the built-in mock ones. Set `STT_PROVIDER=whisper` (and, for real
+  translation or voices, `TRANSLATION_PROVIDER` / `TTS_PROVIDER` with `PIPELINE_EXTRAS`) in
+  `.env`, then `docker compose up --build`. Downloaded models are cached in a volume.
+- Run in the background with `docker compose up -d --build`; watch logs with
+  `docker compose logs -f api pipeline`.
+
 ## Quick start
 
 ```bash
