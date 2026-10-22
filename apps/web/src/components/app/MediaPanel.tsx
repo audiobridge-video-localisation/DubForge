@@ -15,6 +15,7 @@ import {
   stageLabel,
   type Tone,
 } from "../../lib/workflow";
+import { summarizeError } from "../../lib/errors";
 import { DubPlayer } from "./DubPlayer";
 import { SegmentTable, type SegmentHandlers } from "./SegmentTable";
 import { StatusBadge } from "./StatusBadge";
@@ -118,10 +119,26 @@ export function MediaPanel({
   const [retrying, setRetrying] = useState(false);
 
   const processing = isJobInFlight(job);
+  const failure = summarizeError(job.error_message);
   const problemIds = segments
     .filter((s) => isAudioProblem(s.audio_status))
     .map((s) => s.id);
+  const needAudioIds = segments
+    .filter((s) => s.audio_status === "no_audio")
+    .map((s) => s.id);
+  const mismatches = segments.filter(
+    (s) => s.audio_status === "mismatch",
+  ).length;
   const allApproved = total_count > 0 && approved_count === total_count;
+  // what is stopping the dubbed export, in the order a person would fix it
+  const blocker =
+    needAudioIds.length > 0
+      ? `Generate dubbed audio first: ${needAudioIds.length} of ${total_count} lines have none yet.`
+      : approved_count < total_count
+        ? `Approve the remaining ${total_count - approved_count} lines to unlock.`
+        : mismatches > 0
+          ? `${mismatches} dubbed ${mismatches === 1 ? "line is" : "lines are"} the wrong length (see the note above the table).`
+          : "Unlocks when every line is approved and has usable audio.";
   const dubReady = allApproved && usable_audio_count === total_count;
   const voices = Array.from(
     new Set(
@@ -188,7 +205,13 @@ export function MediaPanel({
         <div className="notice notice-danger" role="alert">
           <div>
             <strong>Processing failed</strong>
-            <p>{job.error_message ?? "The job stopped before it finished."}</p>
+            <p>{failure.headline}</p>
+            {failure.details && (
+              <details className="tech">
+                <summary>Show technical details</summary>
+                <pre>{failure.details}</pre>
+              </details>
+            )}
             {retryError && <p>{retryError}</p>}
           </div>
           <button
@@ -227,6 +250,18 @@ export function MediaPanel({
               label="Dubbed audio ready"
             />
             <div className="stats-actions">
+              {needAudioIds.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={batchRegenerating}
+                  onClick={() => onRegenerateProblems(media.id, needAudioIds)}
+                >
+                  {batchRegenerating
+                    ? "Generating…"
+                    : `Generate dubbed audio (${needAudioIds.length})`}
+                </button>
+              )}
               {problemIds.length > 0 && (
                 <button
                   type="button"
@@ -251,6 +286,16 @@ export function MediaPanel({
               </button>
             </div>
           </div>
+          {mismatches > 0 && (
+            <p className="hint" role="status">
+              {mismatches} dubbed{" "}
+              {mismatches === 1 ? "line doesn't" : "lines don't"} fit the
+              original timing. A dub must be within 0.3 s or 15% of the original
+              line (whichever is larger). Regenerating gives the same length, so
+              shorten or lengthen the translation, or adjust the line's start
+              and end, then regenerate it.
+            </p>
+          )}
           {batchRegenerateError && (
             <p className="inline-error" role="alert">
               {batchRegenerateError}
@@ -282,7 +327,7 @@ export function MediaPanel({
                   ? voices.length > 0
                     ? `Voices used: ${voices.join(", ")}`
                     : "Every line is approved with usable audio."
-                  : "Unlocks when every line is approved and has usable audio."}
+                  : blocker}
               </p>
               <div className="deliver-row">
                 {EXPORT_KINDS.map((kind) => (
@@ -334,8 +379,12 @@ export function MediaPanel({
                       </a>
                     )}
                     {exportJob.status === "failed" && (
-                      <span className="inline-error" role="alert">
-                        {exportJob.error_message}
+                      <span
+                        className="inline-error"
+                        role="alert"
+                        title={exportJob.error_message ?? undefined}
+                      >
+                        {summarizeError(exportJob.error_message).headline}
                       </span>
                     )}
                   </div>

@@ -1,3 +1,4 @@
+import { summarizeError } from "./errors";
 import type {
   Artifact,
   Job,
@@ -77,7 +78,7 @@ export function deriveWorkflow(item: MediaWithJob | undefined): WorkflowState {
     return {
       step: 1,
       label: "Processing failed",
-      detail: job.error_message ?? "The job stopped before it finished.",
+      detail: summarizeError(job.error_message).headline,
       tone: "danger",
     };
   }

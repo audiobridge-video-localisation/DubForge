@@ -693,6 +693,30 @@ a {
   background: #fdf1ef;
   color: #6e1a14;
 }
+.app .tech {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.app .tech summary {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.app .tech pre {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  font:
+    12px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .app .notice-warn {
   border: 1px solid #f1cdbb;
   background: #fdf3ee;
@@ -881,6 +905,15 @@ a {
 }
 
 /* inline messages */
+.app .hint {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fdf3ee;
+  color: #6e3118;
+  font-size: 13px;
+  line-height: 1.5;
+}
 .app .inline-error {
   margin: 0;
   color: #8a1f17;
