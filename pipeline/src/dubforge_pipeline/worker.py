@@ -24,7 +24,7 @@ from dubforge_contracts.models import (
     SpeakerSegment,
     TranscriptSegment,
 )
-from dubforge_pipeline.audio import extract_audio
+from dubforge_pipeline.audio import extract_audio, fit_audio_duration
 from dubforge_pipeline.export_assembly import (
     build_dub_audio_track,
     encode_mp3,
@@ -240,7 +240,16 @@ def process_artifact(
     try:
         voice_profile = _get_target_lang()
         result = _get_tts_provider().synthesize(message.text, voice_profile=voice_profile)
-        relative_audio_path = _persist_artifact_audio(result.audio_path, storage_root, artifact_id)
+        audio_path, duration_ms = result.audio_path, result.actual_duration_ms
+        if message.target_duration_ms is not None:
+            try:
+                audio_path, duration_ms = fit_audio_duration(
+                    audio_path, duration_ms, message.target_duration_ms
+                )
+            except RuntimeError:
+                # an unfitted take can still be reviewed (it just shows as a mismatch)
+                logger.warning("Artifact %s: could not fit audio to its slot", artifact_id)
+        relative_audio_path = _persist_artifact_audio(audio_path, storage_root, artifact_id)
     except Exception as exc:  # defensive: never let a bad artifact crash the worker loop
         logger.exception("Artifact %s failed", artifact_id)
         _report_artifact(
@@ -253,7 +262,7 @@ def process_artifact(
         artifact_id,
         ArtifactStatus.COMPLETED,
         audio_path=relative_audio_path,
-        duration_ms=result.actual_duration_ms,
+        duration_ms=duration_ms,
         voice_profile=voice_profile,
     )
 

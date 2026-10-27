@@ -188,6 +188,9 @@ class ArtifactQueueMessage(BaseModel):
     artifact_id: uuid.UUID
     segment_id: uuid.UUID
     text: str
+    # The segment's slot length. The worker time-fits the generated audio to it when it is
+    # close enough to stretch without sounding rushed. None = leave the audio as generated.
+    target_duration_ms: int | None = None
 
 
 class ArtifactCallbackUpdate(BaseModel):
