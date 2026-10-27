@@ -1,15 +1,18 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dubforge_api.config import Settings, get_settings
 from dubforge_api.db import get_db
 from dubforge_api.models import Artifact as ArtifactModel
 from dubforge_api.models import Segment as SegmentModel
 from dubforge_api.redis_client import get_redis
 from dubforge_api.schemas import segment_to_contract
+from dubforge_api.storage import resolve_stored_file
 from dubforge_contracts.models import (
     ARTIFACT_QUEUE_KEY,
     Artifact,
@@ -114,6 +117,12 @@ async def regenerate_segment(
     segment = await db.get(SegmentModel, segment_id)
     if segment is None:
         raise HTTPException(status_code=404, detail="Segment not found")
+    # Falling back to the source text would dub the line in the wrong language.
+    text = (segment.translated_text or "").strip()
+    if not text:
+        raise HTTPException(
+            status_code=409, detail="Add a translation to this line before generating audio"
+        )
 
     artifact = await _get_artifact_for_segment(segment_id, db)
     if artifact is None:
@@ -130,8 +139,28 @@ async def regenerate_segment(
     message = ArtifactQueueMessage(
         artifact_id=artifact.id,
         segment_id=segment.id,
-        text=segment.translated_text or segment.text,
+        text=text,
     )
     await redis.rpush(ARTIFACT_QUEUE_KEY, message.model_dump_json())
 
     return artifact
+
+
+@router.get("/{segment_id}/audio")
+async def get_segment_audio(
+    segment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    """The generated dubbed audio for one segment, for playback in the review screen."""
+    if await db.get(SegmentModel, segment_id) is None:
+        raise HTTPException(status_code=404, detail="Segment not found")
+    artifact = await _get_artifact_for_segment(segment_id, db)
+    if (
+        artifact is None
+        or artifact.status != ArtifactStatus.COMPLETED.value
+        or not artifact.audio_path
+    ):
+        raise HTTPException(status_code=409, detail="This line has no usable dubbed audio yet")
+    path = resolve_stored_file(settings.storage_dir, artifact.audio_path)
+    return FileResponse(path, media_type="audio/wav")

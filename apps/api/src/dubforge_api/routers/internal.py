@@ -41,7 +41,7 @@ async def update_job(
     if payload.progress is not None:
         job.progress = payload.progress
     if payload.error_message is not None:
-        job.error_message = payload.error_message[:2000]
+        job.error_message = payload.error_message[-2000:]
     await db.commit()
     await db.refresh(job, attribute_names=["updated_at"])
     return job
@@ -89,7 +89,7 @@ async def update_artifact(
     if payload.voice_profile is not None:
         artifact.voice_profile = payload.voice_profile
     if payload.error_message is not None:
-        artifact.error_message = payload.error_message[:2000]
+        artifact.error_message = payload.error_message[-2000:]
     await db.commit()
     await db.refresh(artifact, attribute_names=["updated_at"])
     return artifact
@@ -128,7 +128,7 @@ async def update_export_job(
     if payload.output_path is not None:
         export_job.output_path = payload.output_path
     if payload.error_message is not None:
-        export_job.error_message = payload.error_message[:2000]
+        export_job.error_message = payload.error_message[-2000:]
     await db.commit()
     await db.refresh(export_job, attribute_names=["updated_at"])
     return export_job

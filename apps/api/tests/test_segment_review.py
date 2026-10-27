@@ -147,10 +147,28 @@ async def test_ready_for_dubbing_rejected_with_zero_segments(client: AsyncClient
     assert response.status_code == 409
 
 
-async def test_ready_for_dubbing_succeeds_when_all_approved(client: AsyncClient) -> None:
+async def test_ready_for_dubbing_rejected_without_usable_audio(client: AsyncClient) -> None:
+    _project_id, media_id, segments = await _seed_segments(client, 2)
+    for segment in segments:
+        await client.post(f"/segments/{segment['id']}/approve")
+
+    response = await client.post(f"/media/{media_id}/ready-for-dubbing")
+
+    assert response.status_code == 409
+    assert "usable dubbed audio" in response.json()["detail"]
+
+
+async def test_ready_for_dubbing_succeeds_when_approved_with_usable_audio(
+    client: AsyncClient,
+) -> None:
     project_id, media_id, segments = await _seed_segments(client, 2)
     for segment in segments:
         await client.post(f"/segments/{segment['id']}/approve")
+        artifact_id = (await client.post(f"/segments/{segment['id']}/regenerate")).json()["id"]
+        await client.patch(
+            f"/internal/artifacts/{artifact_id}",
+            json={"status": "completed", "audio_path": "a.wav", "duration_ms": 1000},
+        )
 
     response = await client.post(f"/media/{media_id}/ready-for-dubbing")
 

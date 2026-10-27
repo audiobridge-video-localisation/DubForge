@@ -9,22 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from dubforge_api.config import Settings, get_settings
 from dubforge_api.db import get_db
-from dubforge_api.models import Artifact as ArtifactModel
 from dubforge_api.models import ExportJob, Media
 from dubforge_api.models import Segment as SegmentModel
+from dubforge_api.readiness import require_dub_ready
 from dubforge_api.redis_client import get_redis
 from dubforge_contracts.export import segments_to_srt, segments_to_vtt
 from dubforge_contracts.models import (
     EXPORT_QUEUE_KEY,
-    Artifact,
     ExportJobQueueMessage,
     ExportJobRead,
     ExportKind,
     JobStatus,
-    SegmentAudioStatus,
-    SegmentReviewStatus,
     TranscriptSegment,
-    compute_audio_status,
 )
 
 media_export_router = APIRouter(prefix="/media", tags=["exports"])
@@ -83,39 +79,11 @@ async def export_vtt(media_id: uuid.UUID, db: AsyncSession = Depends(get_db)) ->
     )
 
 
-async def _require_dub_ready(media_id: uuid.UUID, db: AsyncSession) -> None:
-    segments = await _ordered_segments(media_id, db)
-    if not segments:
-        raise HTTPException(
-            status_code=409,
-            detail="All segments must be approved and have usable dubbed audio before exporting",
-        )
-
-    artifacts_result = await db.execute(
-        select(ArtifactModel).where(ArtifactModel.segment_id.in_([s.id for s in segments]))
-    )
-    artifact_by_segment_id = {a.segment_id: a for a in artifacts_result.scalars()}
-
-    approved = sum(1 for s in segments if s.review_status == SegmentReviewStatus.APPROVED.value)
-    usable = 0
-    for s in segments:
-        artifact_row = artifact_by_segment_id.get(s.id)
-        artifact_contract = Artifact.model_validate(artifact_row) if artifact_row else None
-        if compute_audio_status(s.duration_ms, artifact_contract) == SegmentAudioStatus.READY:
-            usable += 1
-
-    if approved != len(segments) or usable != len(segments):
-        raise HTTPException(
-            status_code=409,
-            detail="All segments must be approved and have usable dubbed audio before exporting",
-        )
-
-
 async def _create_export_job(
     media_id: uuid.UUID, kind: ExportKind, db: AsyncSession, redis: Redis
 ) -> ExportJob:
     media = await _load_media_or_404(media_id, db)
-    await _require_dub_ready(media_id, db)
+    await require_dub_ready(media_id, db, "exporting")
 
     export_job = ExportJob(
         media_id=media_id, kind=kind.value, status=JobStatus.PENDING.value, progress=0
