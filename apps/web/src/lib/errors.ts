@@ -10,12 +10,33 @@ export interface ErrorSummary {
   details: string | null;
 }
 
+// Known tool failures with a plainer explanation. The full output stays under "details".
+const KNOWN_ERRORS: { match: RegExp; headline: string }[] = [
+  {
+    match: /moov atom not found|Invalid data found when processing input/i,
+    headline:
+      "This file doesn't look like a valid video. It may be corrupted or incomplete. Try re-exporting it and uploading again.",
+  },
+  {
+    match:
+      /does not contain any stream|matches no streams|Stream map .* matches no/i,
+    headline:
+      "No audio track was found in this video. Upload a file that has sound.",
+  },
+  {
+    match: /No space left on device/i,
+    headline: "The server is out of disk space, so the job couldn't finish.",
+  },
+];
+
 export function summarizeError(
   message: string | null | undefined,
 ): ErrorSummary {
   const text = (message ?? "").trim();
   if (!text)
     return { headline: "The job stopped before it finished.", details: null };
+  const known = KNOWN_ERRORS.find(({ match }) => match.test(text));
+  if (known) return { headline: known.headline, details: text };
   if (text.length <= LONG && !text.includes("\n")) {
     return { headline: text, details: null };
   }

@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import type {
-  Segment,
-  SegmentAudioStatus,
-  SegmentReviewStatus,
-  SegmentUpdate,
+import {
+  segmentAudioUrl,
+  type Segment,
+  type SegmentAudioStatus,
+  type SegmentReviewStatus,
+  type SegmentUpdate,
 } from "../../api/client";
 import {
   countByFilter,
   formatDuration,
   formatTimestamp,
   isArtifactInFlight,
+  speakerTone,
   matchesFilter,
   type ReviewFilter,
   type Tone,
@@ -59,6 +61,57 @@ interface Draft {
   speaker_label: string;
   start_ms: number;
   end_ms: number;
+}
+
+// One dubbed line plays at a time; starting another stops the first.
+let nowPlaying: HTMLAudioElement | null = null;
+
+function PlayDubButton({
+  segmentId,
+  version,
+  label,
+}: {
+  segmentId: string;
+  version: string;
+  label: string;
+}) {
+  const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  function toggle() {
+    if (nowPlaying && playing) {
+      nowPlaying.pause();
+      return;
+    }
+    nowPlaying?.pause();
+    const audio = new Audio(segmentAudioUrl(segmentId, version));
+    nowPlaying = audio;
+    setFailed(false);
+    audio.onplay = () => setPlaying(true);
+    audio.onpause = () => setPlaying(false);
+    audio.onended = () => setPlaying(false);
+    audio.onerror = () => {
+      setPlaying(false);
+      setFailed(true);
+    };
+    void audio.play().catch(() => setFailed(true));
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="btn btn-sm"
+        aria-label={`${playing ? "Stop" : "Play"} dubbed audio for ${label}`}
+        onClick={toggle}
+      >
+        {playing ? "■ Stop dub" : "▶ Play dub"}
+      </button>
+      {failed && (
+        <small className="audio-note">Couldn't play this audio.</small>
+      )}
+    </>
+  );
 }
 
 function draftFrom(segment: Segment): Draft {
@@ -229,6 +282,14 @@ function SegmentRow({
     }
   }
 
+  // closing the tab with a half-written edit would silently lose it
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   const audioNote =
     segment.audio_status === "mismatch" && segment.artifact?.duration_ms != null
       ? `Expected ${formatDuration(segment.duration_ms)}, got ${formatDuration(segment.artifact.duration_ms)}`
@@ -268,7 +329,11 @@ function SegmentRow({
           {formatDuration(segment.duration_ms)}
         </td>
         <td className="c-speaker" data-label="Speaker">
-          <span className="speaker">{segment.speaker_label}</span>
+          <span
+            className={`speaker speaker-${speakerTone(segment.speaker_label)}`}
+          >
+            {segment.speaker_label}
+          </span>
         </td>
         <td className="c-text" data-label="Source">
           {segment.text}
@@ -289,6 +354,13 @@ function SegmentRow({
             </StatusBadge>
           </div>
           {audioNote && <small className="audio-note">{audioNote}</small>}
+          {segment.artifact?.status === "completed" && (
+            <PlayDubButton
+              segmentId={segment.id}
+              version={segment.artifact.updated_at}
+              label={`line ${segment.index + 1}`}
+            />
+          )}
         </td>
         <td className="c-act">
           {!editing && (
@@ -450,6 +522,11 @@ function SegmentRow({
                   >
                     Cancel
                   </button>
+                  {dirty && (
+                    <span className="unsaved" role="status">
+                      Unsaved changes
+                    </span>
+                  )}
                   <span className="edit-hint">
                     Esc to cancel · Ctrl/⌘ + Enter to save
                   </span>

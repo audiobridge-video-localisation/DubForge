@@ -261,3 +261,13 @@ export function vttDownloadUrl(mediaId: string): string {
 export function exportDownloadUrl(exportJobId: string): string {
   return `${API_URL}/export-jobs/${exportJobId}/download`;
 }
+
+export function sourceMediaUrl(mediaId: string): string {
+  return `${API_URL}/media/${mediaId}/source`;
+}
+
+// `version` changes when the line's audio is regenerated, so the browser never plays a
+// cached older take.
+export function segmentAudioUrl(segmentId: string, version: string): string {
+  return `${API_URL}/segments/${segmentId}/audio?v=${encodeURIComponent(version)}`;
+}

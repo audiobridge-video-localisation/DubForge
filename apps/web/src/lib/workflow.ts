@@ -236,3 +236,14 @@ export function countByFilter(
     processing: segments.filter((s) => matchesFilter(s, "processing")).length,
   };
 }
+
+export const SPEAKER_TONES = 6;
+
+/** The same speaker label always gets the same colour (0 to SPEAKER_TONES - 1). */
+export function speakerTone(label: string): number {
+  let hash = 0;
+  for (const char of label.trim().toLowerCase()) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return hash % SPEAKER_TONES;
+}

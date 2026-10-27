@@ -16,7 +16,9 @@ import {
   type Tone,
 } from "../../lib/workflow";
 import { summarizeError } from "../../lib/errors";
+import { deriveWarnings } from "../../lib/warnings";
 import { DubPlayer } from "./DubPlayer";
+import { SourcePlayer } from "./SourcePlayer";
 import { SegmentTable, type SegmentHandlers } from "./SegmentTable";
 import { StatusBadge } from "./StatusBadge";
 
@@ -105,20 +107,20 @@ export function MediaPanel({
   } = item;
   const mediaRef = useRef<HTMLMediaElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const canPlay = EXPORT_KINDS.some(
-    (kind) => exportJobs[kind]?.status === "completed",
-  );
+  const sourceRef = useRef<HTMLVideoElement | null>(null);
 
+  // selecting a line seeks the original video, so the reviewer sees what was said
   function seekTo(ms: number) {
-    const el = mediaRef.current;
+    const el = sourceRef.current;
     if (!el) return;
     el.currentTime = ms / 1000;
-    void el.play();
+    void el.play().catch(() => undefined);
   }
   const [retryError, setRetryError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
 
   const processing = isJobInFlight(job);
+  const warnings = deriveWarnings(item);
   const failure = summarizeError(job.error_message);
   const problemIds = segments
     .filter((s) => isAudioProblem(s.audio_status))
@@ -225,6 +227,25 @@ export function MediaPanel({
         </div>
       )}
 
+      {warnings.length > 0 && (
+        <div className="notice notice-warn" role="status">
+          <div>
+            <strong>
+              {warnings.length === 1
+                ? "Heads up"
+                : `${warnings.length} things to check`}
+            </strong>
+            <ul className="warn-list">
+              {warnings.map((w) => (
+                <li key={w.id}>
+                  <b>{w.title}.</b> {w.detail}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {job.status === "completed" && total_count === 0 && (
         <div className="notice notice-warn" role="status">
           <div>
@@ -277,7 +298,7 @@ export function MediaPanel({
               <button
                 type="button"
                 className="btn"
-                disabled={media.ready_for_dubbing || !allApproved}
+                disabled={media.ready_for_dubbing || !dubReady}
                 onClick={() => onReadyForDubbing(media.id)}
               >
                 {media.ready_for_dubbing
@@ -291,9 +312,10 @@ export function MediaPanel({
               {mismatches} dubbed{" "}
               {mismatches === 1 ? "line doesn't" : "lines don't"} fit the
               original timing. A dub must be within 0.3 s or 15% of the original
-              line (whichever is larger). Regenerating gives the same length, so
-              shorten or lengthen the translation, or adjust the line's start
-              and end, then regenerate it.
+              line (whichever is larger). Regenerating speeds up or slows down a
+              dub to fit, but only by about 0.7× to 1.5×. These lines need more
+              than that, so shorten or lengthen the translation, or adjust the
+              line's start and end, then regenerate it.
             </p>
           )}
           {batchRegenerateError && (
@@ -398,6 +420,13 @@ export function MediaPanel({
             </div>
           </section>
 
+          <SourcePlayer
+            mediaId={media.id}
+            segments={segments}
+            videoRef={sourceRef}
+            onActive={setActiveId}
+          />
+
           <DubPlayer
             jobs={exportJobs}
             segments={segments}
@@ -409,7 +438,7 @@ export function MediaPanel({
           <SegmentTable
             segments={segments}
             activeId={activeId}
-            onSeek={canPlay ? seekTo : undefined}
+            onSeek={seekTo}
             {...segmentHandlers}
           />
         </>
