@@ -6,11 +6,105 @@ from pathlib import Path
 import pytest
 
 from dubforge_pipeline.export_assembly import (
+    MAX_ATEMPO,
+    SegmentPlacement,
+    apply_tempo,
     build_dub_audio_track,
     encode_mp3,
     mux_mp4,
+    plan_placements,
     probe_duration_ms,
 )
+
+
+def test_plan_placements_empty_list() -> None:
+    assert plan_placements([], 10_000) == []
+
+
+def test_plan_placements_fitting_audio_is_untouched() -> None:
+    placements = plan_placements([(0, 1000, 900), (2000, 3000, 1000)], 5000)
+    assert placements == [SegmentPlacement(0, 1.0), SegmentPlacement(2000, 1.0)]
+
+
+def test_plan_placements_negligible_overrun_is_not_stretched() -> None:
+    # 1100ms of audio in a 1000ms room is exactly 10% over: left alone, but
+    # the next clip is still pushed so the two don't overlap.
+    placements = plan_placements([(0, 1000, 1100), (1000, 2000, 500)], 3000)
+    assert placements[0] == SegmentPlacement(0, 1.0)
+    assert placements[1] == SegmentPlacement(1100, 1.0)
+
+
+def test_plan_placements_twenty_percent_overrun_gets_1_2x() -> None:
+    placements = plan_placements([(0, 1000, 1200), (1000, 2000, 500)], 3000)
+    assert placements[0].start_ms == 0
+    assert placements[0].tempo == pytest.approx(1.2)
+    # Stretched clip now ends exactly at the next original start: no push.
+    assert placements[1] == SegmentPlacement(1000, 1.0)
+
+
+def test_plan_placements_large_overrun_is_capped_at_max_atempo() -> None:
+    placements = plan_placements([(0, 1000, 3000), (1000, 2000, 500)], 10_000)
+    assert placements[0].tempo == MAX_ATEMPO
+    # 3000ms / 1.25 = 2400ms, so the next clip is pushed there.
+    assert placements[1].start_ms == 2400
+
+
+def test_plan_placements_pushes_following_segments_after_unresolved_overrun() -> None:
+    placements = plan_placements([(0, 1000, 3000), (1000, 2000, 1000), (2000, 3000, 500)], 10_000)
+    # seg0 ends at 2400 (capped), seg1 starts there with no room left (past
+    # seg2's original start) so it also takes the max speed-up and ends at
+    # 3200, which pushes seg2.
+    assert [p.start_ms for p in placements] == [0, 2400, 3200]
+    assert [p.tempo for p in placements] == [MAX_ATEMPO, MAX_ATEMPO, 1.0]
+
+
+def test_plan_placements_preserves_input_order_for_unsorted_input() -> None:
+    placements = plan_placements([(2000, 3000, 500), (0, 1000, 1200), (1000, 2000, 500)], 5000)
+    assert [p.start_ms for p in placements] == [2000, 0, 1000]
+    assert placements[1].tempo == pytest.approx(1.2)
+
+
+def test_plan_placements_clamps_start_below_total_duration() -> None:
+    placements = plan_placements([(0, 1000, 50_000), (1000, 2000, 1000)], 5000)
+    assert placements[1].start_ms == 4999
+
+
+def test_apply_tempo_rejects_non_positive_tempo(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        apply_tempo("in.wav", str(tmp_path / "out.wav"), 0)
+
+
+def test_apply_tempo_raises_on_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=1)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError):
+        apply_tempo("in.wav", str(tmp_path / "out.wav"), 1.2, timeout_s=1)
+
+
+def test_apply_tempo_raises_on_missing_input(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError):
+        apply_tempo(str(tmp_path / "nonexistent.wav"), str(tmp_path / "out.wav"), 1.2)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_apply_tempo_real_shortens_duration(tmp_path: Path) -> None:
+    source = tmp_path / "tone.wav"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", str(source)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    output = tmp_path / "fast.wav"
+
+    apply_tempo(str(source), str(output), 1.25)
+
+    assert output.exists()
+    # 2000ms / 1.25 = 1600ms
+    assert abs(probe_duration_ms(str(output)) - 1600) <= 60
 
 
 def test_probe_duration_ms_raises_on_missing_ffmpeg(tmp_path: Path) -> None:

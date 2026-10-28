@@ -50,17 +50,38 @@ def test_completed_within_tolerance_is_ready() -> None:
     assert compute_audio_status(1000, artifact) == SegmentAudioStatus.READY
 
 
+def test_completed_exactly_at_abs_tolerance_is_ready() -> None:
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=1300)
+    assert compute_audio_status(1000, artifact) == SegmentAudioStatus.READY
+
+
 def test_completed_just_over_abs_tolerance_is_mismatch() -> None:
     artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=1301)
     assert compute_audio_status(1000, artifact) == SegmentAudioStatus.MISMATCH
 
 
+def test_completed_much_shorter_than_slot_is_ready() -> None:
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=200)
+    assert compute_audio_status(1000, artifact) == SegmentAudioStatus.READY
+
+
+def test_completed_zero_length_is_ready() -> None:
+    # Shorter audio is never a mismatch, even degenerate durations.
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=0)
+    assert compute_audio_status(1000, artifact) == SegmentAudioStatus.READY
+
+
 def test_completed_just_under_rel_tolerance_is_ready_for_long_segment() -> None:
-    # 10000ms expected, tolerance is max(300, 1500) = 1500ms.
-    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=11500)
+    # 10000ms expected, tolerance is max(300, 2500) = 2500ms.
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=12500)
     assert compute_audio_status(10000, artifact) == SegmentAudioStatus.READY
 
 
 def test_completed_just_over_rel_tolerance_is_mismatch_for_long_segment() -> None:
-    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=11501)
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=12501)
     assert compute_audio_status(10000, artifact) == SegmentAudioStatus.MISMATCH
+
+
+def test_completed_much_shorter_than_long_segment_is_ready() -> None:
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=2000)
+    assert compute_audio_status(10000, artifact) == SegmentAudioStatus.READY

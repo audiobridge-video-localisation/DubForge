@@ -56,7 +56,9 @@ class SegmentAudioStatus(StrEnum):
 
 
 AUDIO_MISMATCH_ABS_TOLERANCE_MS = 300
-AUDIO_MISMATCH_REL_TOLERANCE = 0.15
+# 0.25 matches MAX_ATEMPO (1.25) in dubforge_pipeline.export_assembly: audio up to
+# 25% longer than its slot can be sped up to fit at export time.
+AUDIO_MISMATCH_REL_TOLERANCE = 0.25
 
 
 class MediaRead(BaseModel):
@@ -128,13 +130,14 @@ def compute_audio_status(segment_duration_ms: int, artifact: Artifact | None) ->
     if artifact.status == ArtifactStatus.OUTDATED:
         return SegmentAudioStatus.OUTDATED
 
-    # COMPLETED: compare actual vs expected duration against tolerance.
+    # COMPLETED: only audio LONGER than its slot beyond tolerance is a mismatch;
+    # shorter audio just leaves silence, which is fine.
     if artifact.duration_ms is None:
         return SegmentAudioStatus.MISMATCH
     tolerance_ms = max(
         AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * segment_duration_ms
     )
-    if abs(artifact.duration_ms - segment_duration_ms) > tolerance_ms:
+    if artifact.duration_ms - segment_duration_ms > tolerance_ms:
         return SegmentAudioStatus.MISMATCH
     return SegmentAudioStatus.READY
 
