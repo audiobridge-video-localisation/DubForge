@@ -53,7 +53,10 @@ Set a login for the site (the app has no accounts of its own):
 ```bash
 mkdir -p deploy
 printf 'admin:%s\n' "$(openssl passwd -apr1 'choose-a-password')" > deploy/htpasswd
+chown 101:101 deploy/htpasswd && chmod 600 deploy/htpasswd   # the proxy runs as uid 101
 ```
+
+Without the `chown`, every request with a password fails with a 500 ("Permission denied").
 
 ## 3. Start
 
