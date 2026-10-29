@@ -16,6 +16,12 @@ x-api-build: &api-build
 
 x-restart: &restart
   restart: unless-stopped
+  # keep container logs from filling the disk on a long-running server
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
 
 services:
   postgres:
