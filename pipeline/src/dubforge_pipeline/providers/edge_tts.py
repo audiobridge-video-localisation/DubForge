@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -48,11 +49,24 @@ def _resolve_voice(voice_profile: str) -> str:
         ) from None
 
 
-def _run_edge_tts_sync(text: str, voice: str, mp3_path: Path) -> None:
+_DEFAULT_RATE = "+0%"
+_RATE_PATTERN = re.compile(r"[+-][0-9]+%")
+
+
+def _validate_rate(rate: str) -> str:
+    # edge-tts expects a signed percentage such as "+20%" or "-10%".
+    if not _RATE_PATTERN.fullmatch(rate):
+        raise ValueError(
+            f"Invalid TTS_RATE '{rate}'; expected a signed percentage like '+20%' or '-10%'"
+        )
+    return rate
+
+
+def _run_edge_tts_sync(text: str, voice: str, mp3_path: Path, rate: str = _DEFAULT_RATE) -> None:
     import edge_tts
 
     async def _synthesize() -> None:
-        communicate = edge_tts.Communicate(text, voice)
+        communicate = edge_tts.Communicate(text, voice, rate=rate)
         await communicate.save(str(mp3_path))
 
     try:
@@ -130,9 +144,13 @@ def _get_wav_duration_ms(wav_path: Path, timeout_s: int) -> int:
 
 
 class EdgeTTSProvider(TTSProvider):
-    def __init__(self, output_dir: str | None = None, timeout_s: int = 600) -> None:
+    def __init__(
+        self, output_dir: str | None = None, timeout_s: int = 600, rate: str | None = None
+    ) -> None:
         self.output_dir = output_dir or tempfile.gettempdir()
         self.timeout_s = timeout_s
+        # Speaking rate; falls back to the TTS_RATE env var, then "+0%" (unchanged speed).
+        self.rate = _validate_rate(rate or os.environ.get("TTS_RATE") or _DEFAULT_RATE)
 
     def synthesize(
         self, text: str, voice_profile: str, target_duration_ms: int | None = None
@@ -144,7 +162,7 @@ class EdgeTTSProvider(TTSProvider):
             tmp_wav_path = Path(tmp_dir) / "speech.wav"
 
             try:
-                _run_edge_tts_sync(text, voice, mp3_path)
+                _run_edge_tts_sync(text, voice, mp3_path, self.rate)
             except Exception as exc:
                 raise RuntimeError(f"edge-tts request failed: {exc}") from exc
 
