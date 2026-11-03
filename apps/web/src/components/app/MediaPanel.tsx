@@ -1,9 +1,6 @@
 import { useRef, useState } from "react";
 
 import {
-  exportDownloadUrl,
-  srtDownloadUrl,
-  vttDownloadUrl,
   type ExportJob,
   type ExportKind,
   type MediaWithJob,
@@ -18,15 +15,10 @@ import {
 import { summarizeError } from "../../lib/errors";
 import { deriveWarnings } from "../../lib/warnings";
 import { DubPlayer } from "./DubPlayer";
+import { ExportCenter, type ExportsLoad } from "./ExportCenter";
 import { SourcePlayer } from "./SourcePlayer";
 import { SegmentTable, type SegmentHandlers } from "./SegmentTable";
 import { StatusBadge } from "./StatusBadge";
-
-const EXPORT_KINDS: ExportKind[] = ["mp3", "mp4"];
-const EXPORT_LABEL: Record<ExportKind, string> = {
-  mp3: "Dubbed audio (MP3)",
-  mp4: "Dubbed video (MP4)",
-};
 
 const JOB_TONE: Record<string, Tone> = {
   pending: "info",
@@ -35,14 +27,12 @@ const JOB_TONE: Record<string, Tone> = {
   failed: "danger",
 };
 
-function inFlight(job: ExportJob | undefined): boolean {
-  return job?.status === "pending" || job?.status === "processing";
-}
-
 export interface MediaPanelProps extends SegmentHandlers {
   item: MediaWithJob;
   exportJobs: Partial<Record<ExportKind, ExportJob>>;
+  exportsLoad: ExportsLoad;
   exportError: string | null;
+  onReloadExports: () => void;
   dubbingError: string | null;
   batchRegenerating: boolean;
   batchRegenerateError: string | null;
@@ -87,7 +77,9 @@ function Meter({
 export function MediaPanel({
   item,
   exportJobs,
+  exportsLoad,
   exportError,
+  onReloadExports,
   dubbingError,
   batchRegenerating,
   batchRegenerateError,
@@ -132,24 +124,7 @@ export function MediaPanel({
     (s) => s.audio_status === "mismatch",
   ).length;
   const allApproved = total_count > 0 && approved_count === total_count;
-  // what is stopping the dubbed export, in the order a person would fix it
-  const blocker =
-    needAudioIds.length > 0
-      ? `Generate dubbed audio first: ${needAudioIds.length} of ${total_count} lines have none yet.`
-      : approved_count < total_count
-        ? `Approve the remaining ${total_count - approved_count} lines to unlock.`
-        : mismatches > 0
-          ? `${mismatches} dubbed ${mismatches === 1 ? "line is" : "lines are"} the wrong length (see the note above the table).`
-          : "Unlocks when every line is approved and has usable audio.";
   const dubReady = allApproved && usable_audio_count === total_count;
-  const voices = Array.from(
-    new Set(
-      segments
-        .map((s) => s.artifact?.voice_profile)
-        .filter((v): v is string => Boolean(v)),
-    ),
-  );
-
   async function retry() {
     setRetrying(true);
     setRetryError(null);
@@ -329,96 +304,14 @@ export function MediaPanel({
             </p>
           )}
 
-          <section className="deliver" aria-label="Export">
-            <div className="deliver-col">
-              <h3>Subtitles</h3>
-              <p>Available as soon as there are lines.</p>
-              <div className="deliver-row">
-                <a className="btn btn-sm" href={srtDownloadUrl(media.id)}>
-                  Download SRT
-                </a>
-                <a className="btn btn-sm" href={vttDownloadUrl(media.id)}>
-                  Download VTT
-                </a>
-              </div>
-            </div>
-            <div className="deliver-col">
-              <h3>Dubbed output</h3>
-              <p>
-                {dubReady
-                  ? voices.length > 0
-                    ? `Voices used: ${voices.join(", ")}`
-                    : "Every line is approved with usable audio."
-                  : blocker}
-              </p>
-              <div className="deliver-row">
-                {EXPORT_KINDS.map((kind) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    className="btn btn-sm btn-primary"
-                    disabled={!dubReady || inFlight(exportJobs[kind])}
-                    onClick={() => onExport(media.id, kind)}
-                  >
-                    Export {kind.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              {EXPORT_KINDS.map((kind) => {
-                const exportJob = exportJobs[kind];
-                if (!exportJob) return null;
-                return (
-                  <div className="export-job" key={kind}>
-                    <span>{EXPORT_LABEL[kind]}</span>
-                    <StatusBadge
-                      tone={JOB_TONE[exportJob.status] ?? "neutral"}
-                      pulse={inFlight(exportJob)}
-                    >
-                      {exportJob.status}
-                    </StatusBadge>
-                    {inFlight(exportJob) && (
-                      <div
-                        className="progress progress-live"
-                        role="progressbar"
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-valuenow={exportJob.progress}
-                        aria-label={`${kind.toUpperCase()} export progress`}
-                      >
-                        <i
-                          style={{
-                            width: `${Math.max(exportJob.progress, 4)}%`,
-                          }}
-                        />
-                      </div>
-                    )}
-                    {exportJob.status === "completed" && (
-                      <a
-                        className="link"
-                        href={exportDownloadUrl(exportJob.id)}
-                      >
-                        Download
-                      </a>
-                    )}
-                    {exportJob.status === "failed" && (
-                      <span
-                        className="inline-error"
-                        role="alert"
-                        title={exportJob.error_message ?? undefined}
-                      >
-                        {summarizeError(exportJob.error_message).headline}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-              {exportError && (
-                <p className="inline-error" role="alert">
-                  {exportError}
-                </p>
-              )}
-            </div>
-          </section>
+          <ExportCenter
+            item={item}
+            exportJobs={exportJobs}
+            exportsLoad={exportsLoad}
+            exportError={exportError}
+            onReloadExports={onReloadExports}
+            onExport={onExport}
+          />
 
           <SourcePlayer
             mediaId={media.id}

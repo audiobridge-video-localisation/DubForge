@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
@@ -6,6 +6,7 @@ import {
   exportMp3,
   exportMp4,
   getExportJob,
+  listMediaExports,
   getProject,
   markReadyForDubbing,
   regenerateSegment,
@@ -27,7 +28,7 @@ import { MediaPanel } from "../components/app/MediaPanel";
 import { ProjectHeader } from "../components/app/ProjectHeader";
 import { UploadDropzone } from "../components/app/UploadDropzone";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { forgetExport, rememberExport, storedExportIds } from "../lib/exports";
+import type { ExportsLoad } from "../components/app/ExportCenter";
 import { isArtifactInFlight, isJobInFlight } from "../lib/workflow";
 
 const EXPORT_KINDS: ExportKind[] = ["mp3", "mp4"];
@@ -60,9 +61,28 @@ export function ProjectDetailPage() {
   const [exportJobs, setExportJobs] = useState<
     Record<string, Partial<Record<ExportKind, ExportJob>>>
   >({});
+  const [exportsLoad, setExportsLoad] = useState<Record<string, ExportsLoad>>(
+    {},
+  );
   const [exportError, setExportError] = useState<Record<string, string | null>>(
     {},
   );
+
+  // The API is the source of truth for exports, so a reload (or another browser) shows
+  // the same state: the latest job of each kind.
+  const loadExports = useCallback((mediaId: string) => {
+    setExportsLoad((current) => ({ ...current, [mediaId]: "loading" }));
+    listMediaExports(mediaId)
+      .then((jobs) => {
+        const byKind: Partial<Record<ExportKind, ExportJob>> = {};
+        for (const job of jobs) byKind[job.kind] = job;
+        setExportJobs((current) => ({ ...current, [mediaId]: byKind }));
+        setExportsLoad((current) => ({ ...current, [mediaId]: "ready" }));
+      })
+      .catch(() =>
+        setExportsLoad((current) => ({ ...current, [mediaId]: "error" })),
+      );
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -74,23 +94,7 @@ export function ProjectDetailPage() {
         if (cancelled) return;
         setProject(detail);
         setMedia(detail.media);
-        // bring back exports started earlier in this browser, so the player returns
-        for (const item of detail.media) {
-          const stored = storedExportIds(item.media.id);
-          for (const kind of EXPORT_KINDS) {
-            const jobId = stored[kind];
-            if (!jobId) continue;
-            getExportJob(jobId)
-              .then((job) => {
-                if (cancelled) return;
-                setExportJobs((current) => ({
-                  ...current,
-                  [item.media.id]: { ...current[item.media.id], [kind]: job },
-                }));
-              })
-              .catch(() => forgetExport(item.media.id, kind));
-          }
-        }
+        for (const item of detail.media) loadExports(item.media.id);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -101,7 +105,7 @@ export function ProjectDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, attempt]);
+  }, [id, attempt, loadExports]);
 
   useEffect(() => {
     const anyInFlight = media.some(
@@ -276,7 +280,6 @@ export function ProjectDetailPage() {
     try {
       const job =
         kind === "mp3" ? await exportMp3(mediaId) : await exportMp4(mediaId);
-      rememberExport(mediaId, kind, job.id);
       setExportJobs((current) => ({
         ...current,
         [mediaId]: { ...current[mediaId], [kind]: job },
@@ -372,6 +375,8 @@ export function ProjectDetailPage() {
               key={item.media.id}
               item={item}
               exportJobs={exportJobs[item.media.id] ?? {}}
+              exportsLoad={exportsLoad[item.media.id] ?? "ready"}
+              onReloadExports={() => loadExports(item.media.id)}
               exportError={exportError[item.media.id] ?? null}
               dubbingError={dubbingError[item.media.id] ?? null}
               batchRegenerating={batchRegenerating[item.media.id] ?? false}

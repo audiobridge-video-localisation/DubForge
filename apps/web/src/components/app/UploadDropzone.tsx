@@ -1,37 +1,17 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import type { UploadOptions } from "../../api/client";
+import {
+  MAX_UPLOAD_BYTES,
+  describeSelection,
+  uploadAdvice,
+  validateVideoFile,
+} from "../../lib/uploadRules";
 import { formatBytes } from "../../lib/workflow";
-
-const VIDEO_EXTENSIONS = [
-  "mp4",
-  "mov",
-  "m4v",
-  "mkv",
-  "webm",
-  "avi",
-  "mpg",
-  "mpeg",
-  "wmv",
-  "flv",
-  "3gp",
-];
-
-function validate(file: File): string | null {
-  if (file.size === 0) return "That file is empty.";
-  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-  if (
-    !file.type.startsWith("video/") &&
-    !VIDEO_EXTENSIONS.includes(extension)
-  ) {
-    return "That doesn't look like a video file. Choose an MP4, MOV, MKV or WebM.";
-  }
-  return null;
-}
 
 type Phase =
   | { kind: "idle" }
-  | { kind: "ready"; file: File }
+  | { kind: "ready"; file: File; note: string | null }
   | { kind: "uploading"; file: File; percent: number }
   | { kind: "success"; file: File }
   | { kind: "error"; file: File | null; message: string };
@@ -50,14 +30,27 @@ export function UploadDropzone({
 
   useEffect(() => () => abort.current?.abort(), []);
 
-  function choose(file: File | undefined) {
-    if (!file) return;
-    const problem = validate(file);
-    setPhase(
-      problem
-        ? { kind: "error", file: null, message: problem }
-        : { kind: "ready", file },
-    );
+  function choose(files: ArrayLike<File> | null | undefined) {
+    const file = files?.[0];
+    if (!file) {
+      // e.g. text or a link was dragged in instead of a file
+      setPhase({
+        kind: "error",
+        file: null,
+        message:
+          "That wasn't a file. Drag a video file here, or browse for one.",
+      });
+      return;
+    }
+    const problem = validateVideoFile(file);
+    if (problem) {
+      setPhase({ kind: "error", file: null, message: problem });
+      return;
+    }
+    const note = [describeSelection(files.length), uploadAdvice(file)]
+      .filter(Boolean)
+      .join(" ");
+    setPhase({ kind: "ready", file, note: note || null });
   }
 
   async function start(file: File) {
@@ -75,7 +68,7 @@ export function UploadDropzone({
       setPhase({ kind: "success", file });
     } catch (err) {
       if ((err as Error).name === "AbortError") {
-        setPhase({ kind: "ready", file });
+        setPhase({ kind: "ready", file, note: null });
       } else {
         setPhase({ kind: "error", file, message: (err as Error).message });
       }
@@ -115,7 +108,7 @@ export function UploadDropzone({
           event.preventDefault();
           depth.current = 0;
           setDragging(false);
-          if (!busy) choose(event.dataTransfer.files[0]);
+          if (!busy) choose(event.dataTransfer.files);
         }}
       >
         <input
@@ -126,7 +119,7 @@ export function UploadDropzone({
           accept="video/*,.mkv,.mov,.m4v"
           aria-describedby={hintId}
           disabled={busy}
-          onChange={(event) => choose(event.target.files?.[0])}
+          onChange={(event) => choose(event.target.files)}
         />
 
         {(phase.kind === "idle" || phase.kind === "error") && (
@@ -144,8 +137,8 @@ export function UploadDropzone({
               )}
             </span>
             <span id={hintId} className="dz-hint">
-              MP4, MOV, MKV, WebM and most other video formats · spoken audio
-              should be English
+              MP4, MOV, MKV, WebM and most other video formats · up to{" "}
+              {formatBytes(MAX_UPLOAD_BYTES)} · spoken audio should be English
             </span>
           </label>
         )}
@@ -153,6 +146,11 @@ export function UploadDropzone({
         {phase.kind === "ready" && (
           <div className="dz-file">
             <FileChip file={phase.file} />
+            {phase.note && (
+              <p className="dz-note" role="status">
+                {phase.note}
+              </p>
+            )}
             <div className="dz-actions">
               <button
                 type="button"

@@ -108,6 +108,12 @@ function detailFrom(status: number, body: string): string {
   } catch {
     // response had no JSON body
   }
+  if (status === 413) {
+    return "The server refused this file because it is too large. Try a smaller or shorter video.";
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return "The DubForge API isn't responding right now. Wait a moment and try again.";
+  }
   return `Request failed with status ${status}`;
 }
 
@@ -244,6 +250,11 @@ export function exportMp3(mediaId: string): Promise<ExportJob> {
 
 export function exportMp4(mediaId: string): Promise<ExportJob> {
   return request<ExportJob>(`/media/${mediaId}/export/mp4`, { method: "POST" });
+}
+
+/** The latest export job of each kind for a video, so state survives a page reload. */
+export function listMediaExports(mediaId: string): Promise<ExportJob[]> {
+  return request<ExportJob[]>(`/media/${mediaId}/exports`);
 }
 
 export function getExportJob(exportJobId: string): Promise<ExportJob> {

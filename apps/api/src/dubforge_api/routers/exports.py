@@ -122,6 +122,23 @@ async def export_mp4(
     return await _create_export_job(media_id, ExportKind.MP4, db, redis)
 
 
+@media_export_router.get("/{media_id}/exports", response_model=list[ExportJobRead])
+async def list_latest_exports(
+    media_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> list[ExportJob]:
+    """The most recent export job of each kind, so the page can rebuild its state after a reload."""
+    await _load_media_or_404(media_id, db)
+    result = await db.execute(
+        select(ExportJob)
+        .where(ExportJob.media_id == media_id)
+        .order_by(ExportJob.created_at.desc(), ExportJob.id)
+    )
+    latest: dict[str, ExportJob] = {}
+    for job in result.scalars().all():
+        latest.setdefault(job.kind, job)
+    return list(latest.values())
+
+
 @export_jobs_router.get("/{export_job_id}", response_model=ExportJobRead)
 async def get_export_job(export_job_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> ExportJob:
     export_job = await db.get(ExportJob, export_job_id)

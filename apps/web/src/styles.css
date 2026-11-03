@@ -795,6 +795,138 @@ a {
   min-width: 100px;
 }
 
+/* export center */
+.app .export-center {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--a-line);
+  border-radius: 14px;
+}
+.app .xc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.app .xc-head h3 {
+  font-size: 17px;
+}
+.app .xc-head p {
+  margin: 3px 0 0;
+  color: var(--a-muted);
+  font-size: 13px;
+}
+.app .xc-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 16px;
+}
+.app .xc-col {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+.app .xc-col h4 {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--a-muted);
+}
+.app .xc-checks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.app .xc-check {
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+}
+.app .xc-ok > span:first-child {
+  color: #2f7a46;
+  font-weight: 700;
+}
+.app .xc-no > span:first-child {
+  color: #b4532a;
+  font-weight: 700;
+}
+.app .xc-blockers {
+  padding: 12px 14px;
+  border: 1px solid #f1cdbb;
+  border-radius: 10px;
+  background: #fdf3ee;
+  color: #6e3118;
+  font-size: 14px;
+}
+.app .xc-blockers ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.app .xc-blockers li + li {
+  margin-top: 6px;
+}
+.app .xc-lines {
+  font-variant-numeric: tabular-nums;
+}
+.app .xc-clear {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid #b9dcc4;
+  border-radius: 10px;
+  background: #eff8f1;
+  color: #1d5b32;
+  font-size: 14px;
+}
+.app .xc-summary {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.app .xc-summary div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+.app .xc-summary dt {
+  color: var(--a-muted);
+}
+.app .xc-summary dd {
+  margin: 0;
+  max-width: 60%;
+  overflow: hidden;
+  font-weight: 500;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app .xc-note {
+  margin: 0;
+  color: var(--a-muted);
+  font-size: 13px;
+}
+.app .xc-reload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.app .xc-stale {
+  flex-basis: 100%;
+  color: #8a5a12;
+  font-size: 12.5px;
+}
+.app .dz-note {
+  margin: 0;
+  color: #8a5a12;
+  font-size: 13px;
+}
+
 /* dub player */
 .app .player {
   display: grid;
@@ -1504,6 +1636,7 @@ a {
   }
   .app .create,
   .app .deliver,
+  .app .xc-grid,
   .app .edit {
     grid-template-columns: 1fr;
   }

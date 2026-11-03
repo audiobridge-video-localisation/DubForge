@@ -1,12 +1,15 @@
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from conftest import FakeRedis
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from dubforge_api.config import get_settings
 from dubforge_api.main import app
+from dubforge_api.models import ExportJob
 
 
 async def _upload(client: AsyncClient) -> dict[str, Any]:
@@ -134,6 +137,46 @@ async def test_export_mp4_requires_full_readiness(
     assert response.json()["kind"] == "mp4"
     export_calls = [c for c in fake_redis.calls if c[0] == "dubforge:exports"]
     assert len(export_calls) == 1
+
+
+async def test_list_exports_empty_before_any_export(client: AsyncClient) -> None:
+    media_with_job = await _upload(client)
+
+    response = await client.get(f"/media/{media_with_job['media']['id']}/exports")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+async def test_list_exports_returns_latest_job_of_each_kind(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    media_with_job = await _seed_segments(client, count=1)
+    await _make_fully_ready(client, media_with_job)
+    media_id = media_with_job["media"]["id"]
+
+    first_mp3 = (await client.post(f"/media/{media_id}/export/mp3")).json()["id"]
+    await client.patch(f"/internal/export-jobs/{first_mp3}", json={"status": "failed"})
+    second_mp3 = (await client.post(f"/media/{media_id}/export/mp3")).json()["id"]
+    mp4 = (await client.post(f"/media/{media_id}/export/mp4")).json()["id"]
+    # the test session is one transaction, so every row got the same now(); age the first
+    # retry so "latest" is unambiguous, as it is when each request commits on its own
+    first = await db_session.get(ExportJob, uuid.UUID(first_mp3))
+    assert first is not None
+    first.created_at = datetime(2020, 1, 1, tzinfo=UTC)
+    await db_session.flush()
+
+    response = await client.get(f"/media/{media_id}/exports")
+
+    assert response.status_code == 200
+    by_kind = {job["kind"]: job["id"] for job in response.json()}
+    assert by_kind == {"mp3": second_mp3, "mp4": mp4}
+
+
+async def test_list_exports_media_not_found(client: AsyncClient) -> None:
+    response = await client.get(f"/media/{uuid.uuid4()}/exports")
+
+    assert response.status_code == 404
 
 
 async def test_get_export_job_not_found(client: AsyncClient) -> None:
