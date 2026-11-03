@@ -30,6 +30,10 @@ COPY apps/api/pyproject.toml apps/api/pyproject.toml
 # torch pulls several GB, so these are opt-in.
 ARG PIPELINE_EXTRAS=""
 
+# torch's wheels are huge, and uv's default 30 s stall timeout fails on slower links.
+ENV UV_HTTP_TIMEOUT=300 \
+    UV_HTTP_RETRIES=10
+
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-install-workspace --package dubforge-pipeline \
         $(for extra in $PIPELINE_EXTRAS; do printf -- '--extra %s ' "$extra"; done)
