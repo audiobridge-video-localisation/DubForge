@@ -140,6 +140,7 @@ async def regenerate_segment(
         artifact_id=artifact.id,
         segment_id=segment.id,
         text=text,
+        target_duration_ms=segment.duration_ms,
     )
     await redis.rpush(ARTIFACT_QUEUE_KEY, message.model_dump_json())
 
