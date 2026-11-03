@@ -577,3 +577,140 @@ def test_process_export_job_fails_when_audio_file_missing_on_disk(
 
     assert calls[-1]["status"] == "failed"
     assert "missing on disk" in str(calls[-1]["error_message"])
+
+
+def _segment_with_audio_duration(
+    start_ms: int, end_ms: int, audio_path: str, audio_duration_ms: int | None
+) -> Segment:
+    now = datetime.now(UTC)
+    return Segment(
+        index=0,
+        start_ms=start_ms,
+        end_ms=end_ms,
+        duration_ms=end_ms - start_ms,
+        speaker_label="A",
+        text="Hi",
+        artifact=Artifact(
+            status=ArtifactStatus.COMPLETED,
+            audio_path=audio_path,
+            duration_ms=audio_duration_ms,
+            created_at=now,
+            updated_at=now,
+        ),
+    )
+
+
+def _export_message() -> ExportJobQueueMessage:
+    return ExportJobQueueMessage(
+        export_job_id=uuid.uuid4(),
+        media_id=uuid.uuid4(),
+        kind=ExportKind.MP3,
+        media_storage_path="proj/video.mp4",
+    )
+
+
+def _prepare_export_storage(storage_root: Path, *audio_names: str) -> None:
+    (storage_root / "artifacts").mkdir(parents=True)
+    for name in audio_names:
+        (storage_root / "artifacts" / name).write_bytes(b"fake")
+    (storage_root / "proj").mkdir()
+    (storage_root / "proj" / "video.mp4").write_bytes(b"fake video")
+
+
+def test_process_export_job_speeds_up_overrunning_segment_and_places_next_later(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[Any] = []
+    _prepare_export_storage(tmp_path, "seg0.wav", "seg1.wav")
+    monkeypatch.setattr(worker, "probe_duration_ms", lambda *_a, **_k: 5000)
+
+    tempo_calls: list[tuple[str, str, float]] = []
+
+    def fake_apply_tempo(input_path: str, output_path: str, tempo: float) -> str:
+        tempo_calls.append((input_path, output_path, tempo))
+        return output_path
+
+    monkeypatch.setattr(worker, "apply_tempo", fake_apply_tempo)
+
+    build_calls: list[Any] = []
+
+    def fake_build(segment_audio: Any, total_duration_ms: Any, output_wav_path: str) -> str:
+        build_calls.append((segment_audio, total_duration_ms))
+        return output_wav_path
+
+    monkeypatch.setattr(worker, "build_dub_audio_track", fake_build)
+    monkeypatch.setattr(worker, "encode_mp3", lambda _wav, out: out)
+
+    # seg0: 1200ms of audio in a 1000ms room -> 1.2x. seg1 fits and keeps its start.
+    segments = [
+        _segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 1200),
+        _segment_with_audio_duration(1000, 2000, "artifacts/seg1.wav", 500),
+    ]
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
+
+    assert calls[-1]["status"] == "completed"
+    assert len(tempo_calls) == 1
+    assert tempo_calls[0][0] == str(tmp_path / "artifacts" / "seg0.wav")
+    assert tempo_calls[0][2] == pytest.approx(1.2)
+
+    placed, total_ms = build_calls[0]
+    assert total_ms == 5000
+    assert placed[0] == (0, tempo_calls[0][1])
+    assert placed[1] == (1000, str(tmp_path / "artifacts" / "seg1.wav"))
+
+
+def test_process_export_job_pushes_next_segment_after_overrun_capped_at_max_tempo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[Any] = []
+    _prepare_export_storage(tmp_path, "seg0.wav", "seg1.wav")
+    monkeypatch.setattr(worker, "probe_duration_ms", lambda *_a, **_k: 10_000)
+    monkeypatch.setattr(worker, "apply_tempo", lambda _in, out, _tempo: out)
+
+    build_calls: list[Any] = []
+
+    def fake_build(segment_audio: Any, total_duration_ms: Any, output_wav_path: str) -> str:
+        build_calls.append(segment_audio)
+        return output_wav_path
+
+    monkeypatch.setattr(worker, "build_dub_audio_track", fake_build)
+    monkeypatch.setattr(worker, "encode_mp3", lambda _wav, out: out)
+
+    # 3000ms in a 1000ms room: capped at 1.25x -> ends at 2400, so seg1 is pushed.
+    segments = [
+        _segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 3000),
+        _segment_with_audio_duration(1000, 2000, "artifacts/seg1.wav", 500),
+    ]
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
+
+    assert calls[-1]["status"] == "completed"
+    assert [start for start, _path in build_calls[0]] == [0, 2400]
+
+
+@pytest.mark.parametrize("recorded_duration", [None, 0])
+def test_process_export_job_probes_audio_when_artifact_duration_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, recorded_duration: int | None
+) -> None:
+    calls: list[Any] = []
+    _prepare_export_storage(tmp_path, "seg0.wav")
+    audio_abs_path = str(tmp_path / "artifacts" / "seg0.wav")
+
+    probed: list[str] = []
+
+    def fake_probe(path: str, *_a: object, **_k: object) -> int:
+        probed.append(path)
+        return 5000 if path.endswith("video.mp4") else 1500
+
+    monkeypatch.setattr(worker, "probe_duration_ms", fake_probe)
+    monkeypatch.setattr(worker, "apply_tempo", lambda _in, out, _tempo: out)
+    monkeypatch.setattr(worker, "build_dub_audio_track", lambda _s, _t, out: out)
+    monkeypatch.setattr(worker, "encode_mp3", lambda _wav, out: out)
+
+    segments = [_segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", recorded_duration)]
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
+
+    assert calls[-1]["status"] == "completed"
+    assert audio_abs_path in probed

@@ -84,6 +84,20 @@ async def test_completed_within_tolerance_is_ready(client: AsyncClient) -> None:
     assert detail["media"][0]["segments"][0]["audio_status"] == "ready"
 
 
+async def test_completed_much_shorter_than_slot_is_ready(client: AsyncClient) -> None:
+    segment = await _seed_segment(client, duration_ms=2000)
+    artifact_id = (await client.post(f"/segments/{segment['id']}/regenerate")).json()["id"]
+    await client.patch(
+        f"/internal/artifacts/{artifact_id}",
+        json={"status": "completed", "audio_path": "/tmp/dub.wav", "duration_ms": 400},
+    )
+
+    detail = (await client.get(f"/projects/{segment['_project_id']}")).json()
+    media = detail["media"][0]
+    assert media["segments"][0]["audio_status"] == "ready"
+    assert media["usable_audio_count"] == 1
+
+
 async def test_completed_far_off_duration_is_mismatch(client: AsyncClient) -> None:
     segment = await _seed_segment(client, duration_ms=1000)
     artifact_id = (await client.post(f"/segments/{segment['id']}/regenerate")).json()["id"]

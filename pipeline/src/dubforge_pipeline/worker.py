@@ -26,9 +26,11 @@ from dubforge_contracts.models import (
 )
 from dubforge_pipeline.audio import extract_audio
 from dubforge_pipeline.export_assembly import (
+    apply_tempo,
     build_dub_audio_track,
     encode_mp3,
     mux_mp4,
+    plan_placements,
     probe_duration_ms,
 )
 from dubforge_pipeline.logging_config import configure_logging
@@ -144,7 +146,7 @@ def _persist_artifact_audio(audio_path: str, storage_root: str, artifact_id: str
     suffix = source.suffix or ".wav"
     destination = artifacts_dir / f"{artifact_id}{suffix}"
     shutil.move(str(source), str(destination))
-    return str(destination.relative_to(Path(storage_root)))
+    return destination.relative_to(Path(storage_root)).as_posix()
 
 
 def _submit_segments(
@@ -296,7 +298,8 @@ def process_export_job(
         video_path = str(Path(storage_root) / message.media_storage_path)
         total_duration_ms = probe_duration_ms(video_path)
 
-        segment_audio: list[tuple[int, str]] = []
+        audio_paths: list[str] = []
+        timings: list[tuple[int, int, int]] = []
         for segment in segments:
             if segment.artifact is None or segment.artifact.audio_path is None:
                 raise RuntimeError(f"segment {segment.id} has no usable audio artifact")
@@ -305,11 +308,25 @@ def process_export_job(
                 raise RuntimeError(
                     f"audio file missing on disk for segment {segment.id}: {abs_path}"
                 )
-            segment_audio.append((segment.start_ms, abs_path))
+            audio_ms = segment.artifact.duration_ms or probe_duration_ms(abs_path)
+            audio_paths.append(abs_path)
+            timings.append((segment.start_ms, segment.end_ms, audio_ms))
+
+        placements = plan_placements(timings, total_duration_ms)
 
         _report_export(client, api_base_url, export_job_id, JobStatus.PROCESSING, progress=30)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
+            segment_audio: list[tuple[int, str]] = []
+            for index, (placement, abs_path) in enumerate(
+                zip(placements, audio_paths, strict=True)
+            ):
+                if placement.tempo > 1.0:
+                    stretched_path = str(Path(tmp_dir) / f"segment_{index}_tempo.wav")
+                    apply_tempo(abs_path, stretched_path, placement.tempo)
+                    abs_path = stretched_path
+                segment_audio.append((placement.start_ms, abs_path))
+
             dub_wav = str(Path(tmp_dir) / "dub_track.wav")
             build_dub_audio_track(segment_audio, total_duration_ms, dub_wav)
             _report_export(client, api_base_url, export_job_id, JobStatus.PROCESSING, progress=60)
@@ -330,7 +347,7 @@ def process_export_job(
         )
         return
 
-    relative_output = str(output_path.relative_to(Path(storage_root)))
+    relative_output = output_path.relative_to(Path(storage_root)).as_posix()
     _report_export(
         client,
         api_base_url,
