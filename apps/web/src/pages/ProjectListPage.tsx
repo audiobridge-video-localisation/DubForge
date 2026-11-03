@@ -36,33 +36,87 @@ export function ProjectListPage() {
   }
 
   return (
-    <main>
-      <h1>DubForge</h1>
-
-      <form onSubmit={handleCreate}>
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Project name"
-          required
-        />
-        <button type="submit" disabled={creating}>
-          {creating ? "Creating…" : "Create project"}
-        </button>
-      </form>
-      {createError && <p role="alert">{createError}</p>}
-
-      <h2>Projects</h2>
-      {loading && <p>Loading projects…</p>}
-      {error && <p role="alert">{error}</p>}
-      {!loading && !error && projects.length === 0 && <p>No projects yet.</p>}
-      <ul>
-        {projects.map((project) => (
-          <li key={project.id}>
-            <Link to={`/projects/${project.id}`}>{project.name}</Link>
-          </li>
-        ))}
-      </ul>
-    </main>
+    <>
+      <header className="app-nav">
+        <Link className="app-brand" to="/">
+          <span className="app-mark">D</span>DubForge
+        </Link>
+        <span className="app-nav-link">video localization workspace</span>
+      </header>
+      <main className="page-canvas">
+        <div className="page-inner">
+          <span className="eyebrow">studio / projects</span>
+          <h1 className="page-title">
+            make every voice
+            <br />
+            feel native.
+          </h1>
+          <p className="page-subtitle">
+            Upload a video, review the transcript, shape the translation, and
+            export a finished dub from one calm workspace.
+          </p>
+          <section className="surface create-card">
+            <div>
+              <h2>Start a new project</h2>
+              <p>
+                Give your next localization pass a home. You can add media and
+                begin processing immediately.
+              </p>
+            </div>
+            <form className="create-form" onSubmit={handleCreate}>
+              <input
+                className="text-input"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Project name"
+                required
+              />
+              <button
+                className="button button-primary"
+                type="submit"
+                disabled={creating}
+              >
+                {creating ? "Creating…" : "Create project"}
+              </button>
+            </form>
+          </section>
+          {createError && (
+            <p className="alert" role="alert">
+              {createError}
+            </p>
+          )}
+          <div className="section-heading">
+            <h2>Your projects</h2>
+            <p>
+              {loading
+                ? "Loading…"
+                : `${projects.length} workspace${projects.length === 1 ? "" : "s"}`}
+            </p>
+          </div>
+          {error && (
+            <p className="alert" role="alert">
+              {error}
+            </p>
+          )}
+          {!loading && !error && projects.length === 0 && (
+            <div className="surface empty-state">
+              No projects yet. Create your first localization workspace above.
+            </div>
+          )}
+          <ul className="project-grid">
+            {projects.map((project) => (
+              <li className="surface project-card" key={project.id}>
+                <Link to={`/projects/${project.id}`}>
+                  <strong>{project.name}</strong>
+                  <small>
+                    Created {new Date(project.created_at).toLocaleDateString()}
+                  </small>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </main>
+    </>
   );
 }

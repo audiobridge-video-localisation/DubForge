@@ -29,4 +29,27 @@ export default tseslint.config(
       "react-refresh/only-export-components": "off",
     },
   },
+  {
+    files: [
+      "src/components/**/*.js",
+      "src/components/**/*.jsx",
+      "src/hooks/**/*.js",
+      "src/hooks/**/*.jsx",
+    ],
+    languageOptions: {
+      globals: {
+        addEventListener: "readonly",
+        clearInterval: "readonly",
+        innerHeight: "readonly",
+        IntersectionObserver: "readonly",
+        ResizeObserver: "readonly",
+        cancelAnimationFrame: "readonly",
+        innerWidth: "readonly",
+        performance: "readonly",
+        requestAnimationFrame: "readonly",
+        removeEventListener: "readonly",
+        setInterval: "readonly",
+      },
+    },
+  },
 );
