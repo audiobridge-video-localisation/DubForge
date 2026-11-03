@@ -39,6 +39,8 @@ before starting the next. Stop with `Ctrl+C`; start it again later with `docker 
   `.env`, then `docker compose up --build`. Downloaded models are cached in a volume.
 - Run in the background with `docker compose up -d --build`; watch logs with
   `docker compose logs -f api pipeline`.
+- To repeat the demo from a clean state: `scripts/demo.sh fresh` (see `DEMO.md`). It resets all
+  demo data and uploads the known-good `samples/demo-speech.mp4`.
 
 ## Quick start
 

@@ -2,6 +2,17 @@
 
 A 6–8 minute walkthrough, then the record of the last smoke run.
 
+## Reset and repeat
+
+```bash
+scripts/demo.sh fresh      # delete all demo data, then upload samples/demo-speech.mp4 and wait
+scripts/demo.sh reset      # only delete (asks you to type "reset"; add --yes to skip the prompt)
+scripts/demo.sh seed       # only upload the sample and print the project link
+```
+
+It keeps the downloaded models. If your compose needs an env file, set `DEMO_ENV_FILE=...`.
+`samples/demo-speech.mp4` is the known-good input: 7 sentences, 17 seconds.
+
 ## Before you start
 
 - Run the stack: `docker compose up --build` (add `--env-file` for mock providers if you do not want to download models).
@@ -56,6 +67,20 @@ Sample video: a short test clip (mock speech-to-text returns two lines); stack r
 
 This runs the real app code, but it is not a real browser: there is no layout or styling, and no actual audio or video playback.
 
+### Run 4 — the plan's October 31 acceptance test, real providers, `samples/demo-speech.mp4`
+
+Run with the timing changes from the stacked timing PR applied (without them, long Hindi lines can be flagged as too long and need editing). Simulated-browser run of the whole path: create project, upload checks, process (Whisper, NLLB, local MMS voice), edit, approve all 7 lines, generate audio (7 of 7 usable), play buttons, SRT and VTT download, MP3 and MP4 export and download, then a refresh in a new window. 14 of 14 steps passed.
+
+Hardening drills on the live stack:
+
+| Drill | Result |
+|-------|--------|
+| Job stuck at 70% for 10 minutes (as after a worker restart) | The page shows a Retry button; Retry re-runs it |
+| Re-processing a video that already had dubbed audio | Completes (this used to be a 500); the old audio rows and files are removed and "ready for dubbing" is cleared |
+| Export download with `output_path` = `../../etc/passwd` | 404; nothing outside storage is served |
+| `/api/internal/*`, `/api/docs`, `/api/openapi.json` through the web address | All 404; the API port itself is published on localhost only |
+| `scripts/demo.sh` on a separate throwaway stack | Wrong confirmation cancels; `reset --yes` empties projects, queues and files but keeps the model cache; `fresh` rebuilds the demo |
+
 ### What these runs did not cover
 
 - **A person looking at it in a real browser.** How it looks (layout, colours, spacing) and real audio and video playback are still to be confirmed by eye.
@@ -66,7 +91,6 @@ This runs the real app code, but it is not a real browser: there is no layout or
 
 - The server's refusal message for a blocked export is generic ("All segments must be approved and have usable dubbed audio before exporting"). The Export center is what explains which lines and why.
 - The API reads an upload fully into memory, so very large files are risky on a small server. The page warns above 500 MB.
-- `PUT /internal/media/{id}/segments` returns 500 once audio exists (carried over from Phase 2, not fixed here).
 
 ### Blank template for the next run
 
