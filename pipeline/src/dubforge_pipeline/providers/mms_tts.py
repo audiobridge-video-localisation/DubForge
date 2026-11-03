@@ -119,4 +119,6 @@ class MMSTTSProvider(TTSProvider):
             used_rate,
             elapsed_s,
         )
-        return AudioResult(audio_path=out_path, actual_duration_ms=duration_ms)
+        return AudioResult(
+            audio_path=out_path, actual_duration_ms=duration_ms, speech_rate=used_rate
+        )

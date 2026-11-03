@@ -85,3 +85,47 @@ class NLLBTranslationProvider(TranslationProvider):
             elapsed_s,
         )
         return translated
+
+    def translate_candidates(
+        self, text: str, src_lang: str, tgt_lang: str, count: int = 1
+    ) -> list[str]:
+        if not text.strip():
+            return [""]
+        if count <= 1:
+            return [self.translate(text, src_lang, tgt_lang)]
+
+        src_code = _nllb_lang_code(src_lang)
+        tgt_code = _nllb_lang_code(tgt_lang)
+        tokenizer, model = self._load()
+
+        import torch
+
+        start_time = time.monotonic()
+        tokenizer.src_lang = src_code
+        inputs = tokenizer(text, return_tensors="pt")
+        forced_bos_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
+
+        with torch.no_grad():
+            generated = model.generate(
+                **inputs,
+                forced_bos_token_id=forced_bos_token_id,
+                max_length=256,
+                num_beams=count,
+                num_return_sequences=count,
+            )
+
+        # beam search returns the highest-scoring translation first
+        decoded = [
+            str(t).strip() for t in tokenizer.batch_decode(generated, skip_special_tokens=True)
+        ]
+        candidates = list(dict.fromkeys(t for t in decoded if t))
+
+        logger.info(
+            "nllb candidates src_lang=%s tgt_lang=%s count=%d unique=%d elapsed_s=%.2f",
+            src_lang,
+            tgt_lang,
+            count,
+            len(candidates),
+            time.monotonic() - start_time,
+        )
+        return candidates or [""]

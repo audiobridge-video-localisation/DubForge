@@ -714,3 +714,46 @@ def test_process_export_job_probes_audio_when_artifact_duration_missing(
 
     assert calls[-1]["status"] == "completed"
     assert audio_abs_path in probed
+
+
+def test_process_artifact_learns_the_voice_speed_from_real_takes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from dubforge_pipeline.speech_rate import get_ms_per_char
+
+    class _RealVoice(TTSProvider):
+        def synthesize(
+            self, text: str, voice_profile: str, target_duration_ms: int | None = None
+        ) -> AudioResult:
+            path = tmp_path / "take.wav"
+            path.write_bytes(b"RIFF....WAVEfmt ")
+            # 10 chars in 500 ms, spoken 1.25x faster than natural: 62.5 ms per char naturally
+            return AudioResult(audio_path=str(path), actual_duration_ms=500, speech_rate=1.25)
+
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir()
+    monkeypatch.setattr(worker, "_get_tts_provider", lambda: _RealVoice())
+
+    message = ArtifactQueueMessage(artifact_id=uuid.uuid4(), segment_id=uuid.uuid4(), text="x" * 10)
+    with _client_recording([]) as client:
+        worker.process_artifact(client, "http://api", str(storage_root), message)
+
+    assert get_ms_per_char(str(storage_root), worker._voice_key("hi")) == pytest.approx(62.5)
+
+
+def test_process_artifact_does_not_learn_from_the_mock_voice(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from dubforge_pipeline.speech_rate import DEFAULT_MS_PER_CHAR, get_ms_per_char
+
+    source_path = tmp_path / "fake.wav"
+    source_path.write_bytes(b"RIFF....WAVEfmt ")
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir()
+    monkeypatch.setattr(worker, "_get_tts_provider", lambda: _FakeTTSProvider(str(source_path)))
+
+    message = ArtifactQueueMessage(artifact_id=uuid.uuid4(), segment_id=uuid.uuid4(), text="Hola")
+    with _client_recording([]) as client:
+        worker.process_artifact(client, "http://api", str(storage_root), message)
+
+    assert get_ms_per_char(str(storage_root), worker._voice_key("hi")) == DEFAULT_MS_PER_CHAR

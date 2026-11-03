@@ -67,6 +67,10 @@ Sample video: a short test clip (mock speech-to-text returns two lines); stack r
 
 This runs the real app code, but it is not a real browser: there is no layout or styling, and no actual audio or video playback.
 
+### Run 3 — real providers (Whisper, NLLB, local MMS voice), 21-second TED clip
+
+7 lines, real Hindi, 7 of 7 dubbed lines ready on the first try; MP3 and MP4 exports have real sound. Each line's room (its own time plus the silence before the next line) is used for the timing rule; the translator offers 6 alternatives per line and the one that fits is used; the voice speaks faster only when a take runs long (4 of 7 lines stayed at natural speed). The speech speed of the voice is learned from its own output (about 83 ms per character here).
+
 ### Run 4 — the plan's October 31 acceptance test, real providers, `samples/demo-speech.mp4`
 
 Run with the timing changes from the stacked timing PR applied (without them, long Hindi lines can be flagged as too long and need editing). Simulated-browser run of the whole path: create project, upload checks, process (Whisper, NLLB, local MMS voice), edit, approve all 7 lines, generate audio (7 of 7 usable), play buttons, SRT and VTT download, MP3 and MP4 export and download, then a refresh in a new window. 14 of 14 steps passed.

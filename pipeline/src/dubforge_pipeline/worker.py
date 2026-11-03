@@ -43,6 +43,7 @@ from dubforge_pipeline.providers.registry import (
     get_tts_provider,
 )
 from dubforge_pipeline.segments import combine_segments, translate_segments
+from dubforge_pipeline.speech_rate import get_ms_per_char, record_take
 from dubforge_pipeline.timing import merge_short_segments
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,11 @@ def _get_tts_provider() -> TTSProvider:
     if _tts_provider_cache is None:
         _tts_provider_cache = get_tts_provider()
     return _tts_provider_cache
+
+
+def _voice_key(lang: str) -> str:
+    """What the learned speech rate is filed under: a voice speaks at its own pace."""
+    return f"{type(_get_tts_provider()).__name__}:{lang}"
 
 
 def reset_provider_cache() -> None:
@@ -214,7 +220,12 @@ def process_job(
         src_lang = os.environ.get("SOURCE_LANG", "en")
         tgt_lang = _get_target_lang()
         segments = translate_segments(
-            segments, _get_translator(), src_lang=src_lang, tgt_lang=tgt_lang
+            segments,
+            _get_translator(),
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            # pick translations that the voice can say in the time each line has
+            ms_per_char=get_ms_per_char(storage_root, _voice_key(tgt_lang)),
         )
 
         _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=90)
@@ -247,6 +258,14 @@ def process_artifact(
             target_duration_ms=message.target_duration_ms,
         )
         audio_path, duration_ms = result.audio_path, result.actual_duration_ms
+        if result.speech_rate is not None:
+            record_take(
+                storage_root,
+                _voice_key(voice_profile),
+                message.text,
+                result.actual_duration_ms,
+                result.speech_rate,
+            )
         if message.target_duration_ms is not None:
             try:
                 audio_path, duration_ms = fit_audio_duration(

@@ -160,10 +160,12 @@ class EdgeTTSProvider(TTSProvider):
                 return _get_wav_duration_ms(tmp_wav_path, self.timeout_s)
 
             duration_ms = take(1.0)
+            used_rate = 1.0
             if target_duration_ms is not None and is_too_long(duration_ms, target_duration_ms):
                 rate = speedup_for(duration_ms, target_duration_ms, MAX_NATURAL_RATE)
                 if rate > 1.0:
                     duration_ms = take(rate)
+                    used_rate = rate
 
             fd, final_path = tempfile.mkstemp(suffix=".wav", dir=self.output_dir)
             os.close(fd)
@@ -175,4 +177,6 @@ class EdgeTTSProvider(TTSProvider):
             len(text),
             duration_ms,
         )
-        return AudioResult(audio_path=final_path, actual_duration_ms=duration_ms)
+        return AudioResult(
+            audio_path=final_path, actual_duration_ms=duration_ms, speech_rate=used_rate
+        )

@@ -92,6 +92,7 @@ def test_synthesize_keeps_a_take_that_is_not_too_long(tmp_path: Path, mock_edge_
     result = provider.synthesize("Hello there.", "hi", target_duration_ms=999_999)
 
     assert FakeCommunicate.rates == ["+0%"]
+    assert result.speech_rate == 1.0
     assert result.actual_duration_ms != 999_999  # the real audio length, never the target
 
 
@@ -102,6 +103,7 @@ def test_synthesize_speaks_faster_when_the_take_is_too_long(
     result = provider.synthesize("Hello there.", "hi", target_duration_ms=500)
 
     assert FakeCommunicate.rates == ["+0%", "+30%"]  # capped at a natural speed-up
+    assert result.speech_rate == pytest.approx(1.3)
     assert result.actual_duration_ms < 900  # about 1000 / 1.3
 
 

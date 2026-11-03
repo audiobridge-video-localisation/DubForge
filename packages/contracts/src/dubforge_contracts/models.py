@@ -21,6 +21,9 @@ class SpeakerSegment(BaseModel):
 class AudioResult(BaseModel):
     audio_path: str
     actual_duration_ms: int
+    # How much faster than its natural pace the voice was asked to speak (1.0 = natural).
+    # None means this is not a real voice (the mock), so nothing can be learned from it.
+    speech_rate: float | None = None
 
 
 class JobStatus(StrEnum):

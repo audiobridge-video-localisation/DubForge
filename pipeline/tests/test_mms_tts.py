@@ -200,6 +200,7 @@ def test_synthesize_speaks_faster_when_the_take_is_too_long(
     assert model.rates_seen[0] == 1.0
     assert max(model.rates_seen) == 1.3  # capped at a natural speed-up
     assert abs(result.actual_duration_ms - 1000 / 1.3) < 25
+    assert result.speech_rate == pytest.approx(1.3)
     assert model.speaking_rate == 1.0  # the shared model is left at its normal speed
 
 
@@ -213,3 +214,4 @@ def test_synthesize_does_not_change_speed_when_the_take_fits(
     model = next(iter(provider._models.values()))
     assert model.rates_seen == [1.0]
     assert abs(result.actual_duration_ms - 1000) < 5
+    assert result.speech_rate == 1.0
