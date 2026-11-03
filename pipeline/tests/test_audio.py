@@ -89,7 +89,7 @@ def _silent_wav(path: Path, duration_ms: int) -> str:
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 @pytest.mark.parametrize(
     ("current_ms", "target_ms"),
-    [(3000, 2000), (5360, 2880), (1792, 1080)],  # the last two are real Hindi lines
+    [(3200, 2400), (3300, 2400), (1500, 1080)],
 )
 def test_fit_audio_duration_speeds_up_audio_that_is_too_long(
     tmp_path: Path, current_ms: int, target_ms: int
@@ -122,7 +122,7 @@ def test_fit_audio_duration_leaves_audio_that_fits_or_is_short(
     assert fit_audio_duration(path, current_ms, target_ms) == (path, current_ms)
 
 
-@pytest.mark.parametrize(("current_ms", "target_ms"), [(3440, 1660), (6000, 2000)])
+@pytest.mark.parametrize(("current_ms", "target_ms"), [(3440, 1660), (6000, 2000), (5488, 2880)])
 def test_fit_audio_duration_leaves_audio_that_cannot_fit_in_range(
     tmp_path: Path, current_ms: int, target_ms: int
 ) -> None:

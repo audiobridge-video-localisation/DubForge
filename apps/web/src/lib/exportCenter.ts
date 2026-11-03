@@ -86,7 +86,7 @@ export function deriveExportCenter(item: MediaWithJob): ExportCenterState {
   add(
     "mismatch",
     lines((s) => s.audio_status === "mismatch"),
-    "The dub is too long for its slot. Shorten the translation or widen the line, then regenerate.",
+    "The dub is too long to fit before the next line. Shorten the translation or widen the line, then regenerate.",
   );
 
   const voices = Array.from(

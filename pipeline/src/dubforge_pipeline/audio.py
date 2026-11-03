@@ -2,18 +2,14 @@ import subprocess
 import wave
 from pathlib import Path
 
-from dubforge_contracts.models import (
-    AUDIO_MISMATCH_ABS_TOLERANCE_MS,
-    AUDIO_MISMATCH_REL_TOLERANCE,
-)
+from dubforge_pipeline.dub_fit import is_too_long, speedup_for
 
-# The most dubbed speech is sped up at generation to fit its slot. Past this it sounds
-# rushed, so a line that would still not fit is left as generated and shows up as a
-# duration mismatch for a person to fix (shorter text, or a wider slot). Export may
-# speed an overrunning clip up a little more (export_assembly.MAX_ATEMPO).
-MAX_STRETCH = 1.5
-# Aim to land this share of the way into the tolerance, so a line is not left on the edge.
-TARGET_TOLERANCE_SHARE = 0.5
+# The most the finished audio is sped up after synthesis (the synthesiser has already
+# spoken faster, see dub_fit.MAX_NATURAL_RATE). Past this it sounds rushed, so a line that
+# would still not fit is left as generated and shows up as a duration mismatch for a person
+# to fix (shorter text, or a wider slot). Export may speed it up a little more
+# (export_assembly.MAX_ATEMPO).
+MAX_STRETCH = 1.25
 
 
 def _run_ffmpeg(cmd: list[str], timeout_s: int) -> None:
@@ -56,21 +52,17 @@ def wav_duration_ms(path: str) -> int:
 def fit_audio_duration(
     audio_path: str, current_ms: int, target_ms: int, timeout_s: int = 120
 ) -> tuple[str, int]:
-    """Speed up dubbed audio (pitch preserved) that is too long for its slot.
+    """Speed up dubbed audio (pitch preserved) that is too long for its room.
 
     Returns (path, duration_ms). Audio that is not too long is returned unchanged: shorter
     audio just leaves silence, which is fine. So is audio that would still not fit after a
     stretch of at most MAX_STRETCH, since a half-fitted take still has to be fixed by hand.
     """
-    if current_ms <= 0 or target_ms <= 0:
-        return audio_path, current_ms
-    tolerance_ms = max(AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * target_ms)
-    if current_ms - target_ms <= tolerance_ms:
+    if current_ms <= 0 or target_ms <= 0 or not is_too_long(current_ms, target_ms):
         return audio_path, current_ms
 
-    aim_ms = target_ms + tolerance_ms * TARGET_TOLERANCE_SHARE
-    tempo = min(current_ms / aim_ms, MAX_STRETCH)
-    if current_ms / tempo - target_ms > tolerance_ms:
+    tempo = speedup_for(current_ms, target_ms, MAX_STRETCH)
+    if is_too_long(round(current_ms / tempo), target_ms):
         return audio_path, current_ms
 
     source = Path(audio_path)

@@ -13,6 +13,7 @@ from dubforge_api.schemas import (
     ProjectCreate,
     ProjectDetailRead,
     ProjectRead,
+    rooms_by_segment,
     segment_to_contract,
 )
 from dubforge_contracts.models import JobRead, MediaRead, SegmentAudioStatus, SegmentReviewStatus
@@ -63,7 +64,11 @@ async def get_project(
     for item in project.media:
         if item.job is None:
             continue
-        segments = [segment_to_contract(s, artifact_by_segment_id.get(s.id)) for s in item.segments]
+        rooms = rooms_by_segment(list(item.segments))
+        segments = [
+            segment_to_contract(s, artifact_by_segment_id.get(s.id), rooms.get(s.id))
+            for s in item.segments
+        ]
         media.append(
             MediaWithJob(
                 media=MediaRead.model_validate(item),

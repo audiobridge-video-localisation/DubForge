@@ -241,7 +241,11 @@ def process_artifact(
 
     try:
         voice_profile = _get_target_lang()
-        result = _get_tts_provider().synthesize(message.text, voice_profile=voice_profile)
+        result = _get_tts_provider().synthesize(
+            message.text,
+            voice_profile=voice_profile,
+            target_duration_ms=message.target_duration_ms,
+        )
         audio_path, duration_ms = result.audio_path, result.actual_duration_ms
         if message.target_duration_ms is not None:
             try:
