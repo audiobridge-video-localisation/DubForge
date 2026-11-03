@@ -86,7 +86,7 @@ export function deriveExportCenter(item: MediaWithJob): ExportCenterState {
   add(
     "mismatch",
     lines((s) => s.audio_status === "mismatch"),
-    "The dub is too long or too short for its slot. Shorten or lengthen the translation, then regenerate.",
+    "The dub is too long for its slot. Shorten the translation or widen the line, then regenerate.",
   );
 
   const voices = Array.from(
@@ -126,8 +126,7 @@ const BLOCKER_TITLES: Record<BlockerKind, (n: number) => string> = {
     `${n} ${n === 1 ? "line is" : "lines are"} still being generated`,
   failed: (n) => `Audio failed for ${n} ${n === 1 ? "line" : "lines"}`,
   outdated: (n) => `${n} ${n === 1 ? "line has" : "lines have"} outdated audio`,
-  mismatch: (n) =>
-    `${n} dubbed ${n === 1 ? "line is" : "lines are"} the wrong length`,
+  mismatch: (n) => `${n} dubbed ${n === 1 ? "line is" : "lines are"} too long`,
 };
 
 export function blockerTitle(blocker: Blocker): string {

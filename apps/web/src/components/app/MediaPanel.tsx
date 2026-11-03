@@ -305,12 +305,11 @@ export function MediaPanel({
           </div>
           {mismatches > 0 && (
             <p className="hint" role="status">
-              {mismatches} dubbed{" "}
-              {mismatches === 1 ? "line doesn't" : "lines don't"} fit the
-              original timing. A dub must be within 0.3 s or 15% of the original
-              line (whichever is larger). Regenerating speeds up or slows down a
-              dub to fit, but only by about 0.7× to 1.5×. These lines need more
-              than that, so shorten or lengthen the translation, or adjust the
+              {mismatches} dubbed {mismatches === 1 ? "line is" : "lines are"}{" "}
+              too long for the original timing. A dub may run at most 0.3 s or
+              25% over its line (whichever is larger); a shorter dub is fine.
+              Regenerating speeds a long dub up by as much as 1.5×, but these
+              lines need more than that. Shorten the translation, or widen the
               line's start and end, then regenerate it.
             </p>
           )}

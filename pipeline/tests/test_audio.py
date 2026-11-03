@@ -87,31 +87,43 @@ def _silent_wav(path: Path, duration_ms: int) -> str:
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
-@pytest.mark.parametrize(("current_ms", "target_ms"), [(2000, 2500), (3000, 2000)])
-def test_fit_audio_duration_stretches_to_the_slot(
+@pytest.mark.parametrize(
+    ("current_ms", "target_ms"),
+    [(3000, 2000), (5360, 2880), (1792, 1080)],  # the last two are real Hindi lines
+)
+def test_fit_audio_duration_speeds_up_audio_that_is_too_long(
     tmp_path: Path, current_ms: int, target_ms: int
 ) -> None:
+    from dubforge_contracts.models import (
+        AUDIO_MISMATCH_ABS_TOLERANCE_MS,
+        AUDIO_MISMATCH_REL_TOLERANCE,
+    )
     from dubforge_pipeline.audio import fit_audio_duration
 
     path = _silent_wav(tmp_path / "dub.wav", current_ms)
 
     fitted, duration_ms = fit_audio_duration(path, current_ms, target_ms)
 
-    assert abs(duration_ms - target_ms) < 50
+    tolerance_ms = max(AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * target_ms)
+    assert target_ms <= duration_ms <= target_ms + tolerance_ms  # fits, and not rushed past it
+    assert duration_ms < current_ms
     assert Path(fitted).exists()
     assert not Path(path).exists()  # replaced by the fitted file
 
 
-def test_fit_audio_duration_leaves_audio_within_tolerance(tmp_path: Path) -> None:
+@pytest.mark.parametrize(("current_ms", "target_ms"), [(2000, 2200), (2400, 2000), (1000, 4000)])
+def test_fit_audio_duration_leaves_audio_that_fits_or_is_short(
+    tmp_path: Path, current_ms: int, target_ms: int
+) -> None:
     from dubforge_pipeline.audio import fit_audio_duration
 
-    path = _silent_wav(tmp_path / "dub.wav", 2000)
+    path = _silent_wav(tmp_path / "dub.wav", current_ms)
 
-    assert fit_audio_duration(path, 2000, 2200) == (path, 2000)
+    assert fit_audio_duration(path, current_ms, target_ms) == (path, current_ms)
 
 
-@pytest.mark.parametrize(("current_ms", "target_ms"), [(1000, 4000), (6000, 2000)])
-def test_fit_audio_duration_leaves_audio_needing_too_much_stretch(
+@pytest.mark.parametrize(("current_ms", "target_ms"), [(3440, 1660), (6000, 2000)])
+def test_fit_audio_duration_leaves_audio_that_cannot_fit_in_range(
     tmp_path: Path, current_ms: int, target_ms: int
 ) -> None:
     from dubforge_pipeline.audio import fit_audio_duration

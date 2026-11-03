@@ -7,11 +7,13 @@ from dubforge_contracts.models import (
     AUDIO_MISMATCH_REL_TOLERANCE,
 )
 
-# How far dubbed speech may be sped up or slowed down to fit its slot. Past this it sounds
-# rushed or drawn out, so the line is left as generated and shows up as a duration mismatch
-# for a person to fix (shorter text, or a wider slot).
-MIN_STRETCH = 0.7
+# The most dubbed speech is sped up at generation to fit its slot. Past this it sounds
+# rushed, so a line that would still not fit is left as generated and shows up as a
+# duration mismatch for a person to fix (shorter text, or a wider slot). Export may
+# speed an overrunning clip up a little more (export_assembly.MAX_ATEMPO).
 MAX_STRETCH = 1.5
+# Aim to land this share of the way into the tolerance, so a line is not left on the edge.
+TARGET_TOLERANCE_SHARE = 0.5
 
 
 def _run_ffmpeg(cmd: list[str], timeout_s: int) -> None:
@@ -54,19 +56,21 @@ def wav_duration_ms(path: str) -> int:
 def fit_audio_duration(
     audio_path: str, current_ms: int, target_ms: int, timeout_s: int = 120
 ) -> tuple[str, int]:
-    """Time-stretch dubbed audio (pitch preserved) so it fills its slot.
+    """Speed up dubbed audio (pitch preserved) that is too long for its slot.
 
-    Returns (path, duration_ms). Audio already within the mismatch tolerance, or needing
-    more than MIN_STRETCH..MAX_STRETCH, is returned unchanged.
+    Returns (path, duration_ms). Audio that is not too long is returned unchanged: shorter
+    audio just leaves silence, which is fine. So is audio that would still not fit after a
+    stretch of at most MAX_STRETCH, since a half-fitted take still has to be fixed by hand.
     """
     if current_ms <= 0 or target_ms <= 0:
         return audio_path, current_ms
     tolerance_ms = max(AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * target_ms)
-    if abs(current_ms - target_ms) <= tolerance_ms:
+    if current_ms - target_ms <= tolerance_ms:
         return audio_path, current_ms
 
-    tempo = current_ms / target_ms  # >1 speeds up (audio too long), <1 slows down
-    if not MIN_STRETCH <= tempo <= MAX_STRETCH:
+    aim_ms = target_ms + tolerance_ms * TARGET_TOLERANCE_SHARE
+    tempo = min(current_ms / aim_ms, MAX_STRETCH)
+    if current_ms / tempo - target_ms > tolerance_ms:
         return audio_path, current_ms
 
     source = Path(audio_path)

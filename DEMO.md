@@ -34,7 +34,7 @@ It keeps the downloaded models. If your compose needs an env file, set `DEMO_ENV
 | 8 | Scroll to **Export center**. | "This says exactly what stands between us and an export." | "1 thing is blocking export: 1 line needs changes. Line 2." Export buttons are disabled. |
 | 9 | Fix and approve the line. Click **Generate dubbed audio**. | "Now it makes the voice for each line." | Audio states move pending → ready. |
 | 10 | Press **Play dub** on a line. | "Each line can be heard on its own." | The clip plays (silent on mock). |
-| 11 | Make one translation very long, save, **Regenerate**. | "Small timing problems fix themselves." | Small gaps are time-fitted. A big gap stays flagged "wrong length" and appears in the Export center. |
+| 11 | Make one translation very long, save, **Regenerate**. | "Small timing problems fix themselves." | Small gaps are time-fitted. A dub far longer than its slot stays flagged "too long" and appears in the Export center. |
 | 12 | Back in **Export center**, clear every blocker. | "Ready means every line is approved and has usable audio." | "Ready to export", the project summary, and the export buttons enabled. |
 | 13 | Click **Export MP3** and **Export MP4**. | "Exports run in the background." | A progress bar, then **Download**. |
 | 14 | **Refresh the page** while an export runs, then after it finishes. | "Nothing is stored in the browser. The page asks the server." | The same export state comes back; finished exports still offer **Download**. |
