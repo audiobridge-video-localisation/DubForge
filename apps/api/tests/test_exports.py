@@ -291,3 +291,29 @@ async def test_internal_list_media_segments_not_found(client: AsyncClient) -> No
     response = await client.get(f"/internal/media/{uuid.uuid4()}/segments")
 
     assert response.status_code == 404
+
+
+async def test_download_export_refuses_a_path_outside_storage(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    media_with_job = await _seed_segments(client, count=1)
+    await _make_fully_ready(client, media_with_job)
+    export_job_id = (
+        await client.post(f"/media/{media_with_job['media']['id']}/export/mp3")
+    ).json()["id"]
+    outside = (
+        Path(app.dependency_overrides[get_settings]().storage_dir).parent / "outside-secret.txt"
+    )
+    outside.write_text("secret")
+    try:
+        await client.patch(
+            f"/internal/export-jobs/{export_job_id}",
+            json={"status": "completed", "output_path": "../outside-secret.txt"},
+        )
+
+        response = await client.get(f"/export-jobs/{export_job_id}/download")
+
+        assert response.status_code == 404
+        assert b"secret" not in response.content
+    finally:
+        outside.unlink(missing_ok=True)

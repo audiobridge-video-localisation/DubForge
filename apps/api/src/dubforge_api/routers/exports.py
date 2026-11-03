@@ -1,5 +1,4 @@
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -13,6 +12,7 @@ from dubforge_api.models import ExportJob, Media
 from dubforge_api.models import Segment as SegmentModel
 from dubforge_api.readiness import require_dub_ready
 from dubforge_api.redis_client import get_redis
+from dubforge_api.storage import resolve_stored_file
 from dubforge_contracts.export import segments_to_srt, segments_to_vtt
 from dubforge_contracts.models import (
     EXPORT_QUEUE_KEY,
@@ -159,9 +159,7 @@ async def download_export_job(
     if export_job.status != JobStatus.COMPLETED.value or not export_job.output_path:
         raise HTTPException(status_code=409, detail="Export is not complete yet")
 
-    absolute_path = Path(settings.storage_dir) / export_job.output_path
-    if not absolute_path.exists():
-        raise HTTPException(status_code=404, detail="Export output file is missing on disk")
+    absolute_path = resolve_stored_file(settings.storage_dir, export_job.output_path)
 
     is_mp3 = export_job.kind == ExportKind.MP3.value
     media_type = "audio/mpeg" if is_mp3 else "video/mp4"

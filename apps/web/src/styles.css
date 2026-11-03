@@ -795,6 +795,16 @@ a {
   min-width: 100px;
 }
 
+.app .job-stalled {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.app .job-stalled p {
+  margin: 0;
+}
+
 /* export center */
 .app .export-center {
   display: grid;

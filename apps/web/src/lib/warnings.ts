@@ -21,6 +21,17 @@ const MAX_CHARS_PER_SECOND = 18;
 
 const WORKER_IDLE_MS = 30_000;
 const STALLED_MS = 3 * 60_000;
+// Mirrors job_stall_retry_seconds in the API: past this a silent job may be retried by hand.
+export const STALL_RETRY_MS = 5 * 60_000;
+
+/** A queued or running job that has said nothing for long enough to be treated as interrupted. */
+export function canRetryStalledJob(
+  job: MediaWithJob["job"],
+  now: number = Date.now(),
+): boolean {
+  const inFlight = job.status === "pending" || job.status === "processing";
+  return inFlight && now - new Date(job.updated_at).getTime() > STALL_RETRY_MS;
+}
 
 function tolerance(durationMs: number): number {
   return Math.max(MISMATCH_ABS_MS, MISMATCH_REL * durationMs);
@@ -53,7 +64,7 @@ export function deriveWarnings(
       id: "job-stalled",
       title: "Processing is taking longer than usual",
       detail:
-        "The first run downloads speech and translation models, which can take several minutes. If it stays on the same step, check the pipeline logs (docker compose logs pipeline).",
+        "The first run downloads speech and translation models, which can take several minutes. If nothing changes for a few more minutes the job may have been interrupted (for example by a restart), and a Retry button will appear.",
     });
   }
 

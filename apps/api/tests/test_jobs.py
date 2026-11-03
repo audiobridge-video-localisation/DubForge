@@ -1,8 +1,12 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from conftest import FakeRedis
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from dubforge_api.models import Job
 
 
 async def _upload(client: AsyncClient) -> dict[str, Any]:
@@ -85,6 +89,53 @@ async def test_retry_job(client: AsyncClient, fake_redis: FakeRedis) -> None:
 async def test_retry_non_failed_job_conflicts(client: AsyncClient) -> None:
     media_with_job = await _upload(client)
     job_id = media_with_job["job"]["id"]
+
+    response = await client.post(f"/jobs/{job_id}/retry")
+
+    assert response.status_code == 409
+
+
+async def test_retry_an_interrupted_job(
+    client: AsyncClient, db_session: AsyncSession, fake_redis: FakeRedis
+) -> None:
+    media_with_job = await _upload(client)
+    job_id = media_with_job["job"]["id"]
+    await client.patch(f"/internal/jobs/{job_id}", json={"status": "processing", "progress": 70})
+    job = await db_session.get(Job, uuid.UUID(job_id))
+    assert job is not None
+    job.updated_at = datetime.now(UTC) - timedelta(hours=1)  # no update for an hour
+    await db_session.flush()
+    queued_before = len(fake_redis.calls)
+
+    response = await client.post(f"/jobs/{job_id}/retry")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
+    assert len(fake_redis.calls) == queued_before + 1
+
+
+async def test_a_job_that_is_still_making_progress_cannot_be_retried(
+    client: AsyncClient,
+) -> None:
+    media_with_job = await _upload(client)
+    job_id = media_with_job["job"]["id"]
+    await client.patch(f"/internal/jobs/{job_id}", json={"status": "processing", "progress": 70})
+
+    response = await client.post(f"/jobs/{job_id}/retry")
+
+    assert response.status_code == 409
+
+
+async def test_a_completed_job_cannot_be_retried_even_when_old(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    media_with_job = await _upload(client)
+    job_id = media_with_job["job"]["id"]
+    await client.patch(f"/internal/jobs/{job_id}", json={"status": "completed", "progress": 100})
+    job = await db_session.get(Job, uuid.UUID(job_id))
+    assert job is not None
+    job.updated_at = datetime.now(UTC) - timedelta(days=2)
+    await db_session.flush()
 
     response = await client.post(f"/jobs/{job_id}/retry")
 

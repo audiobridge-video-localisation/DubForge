@@ -13,7 +13,7 @@ import {
   type Tone,
 } from "../../lib/workflow";
 import { summarizeError } from "../../lib/errors";
-import { deriveWarnings } from "../../lib/warnings";
+import { canRetryStalledJob, deriveWarnings } from "../../lib/warnings";
 import { DubPlayer } from "./DubPlayer";
 import { ExportCenter, type ExportsLoad } from "./ExportCenter";
 import { SourcePlayer } from "./SourcePlayer";
@@ -175,6 +175,27 @@ export function MediaPanel({
             <i style={{ width: `${Math.max(job.progress, 4)}%` }} />
           </div>
           <p>This page updates on its own. You can leave and come back.</p>
+          {canRetryStalledJob(job) && (
+            <div className="job-stalled">
+              <p>
+                Nothing has changed for several minutes, so this job may have
+                been interrupted. You can run it again.
+              </p>
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                disabled={retrying}
+                onClick={retry}
+              >
+                {retrying ? "Retrying…" : "Retry"}
+              </button>
+              {retryError && (
+                <p className="inline-error" role="alert">
+                  {retryError}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
