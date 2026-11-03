@@ -20,15 +20,21 @@ class FakeTokenizer:
         return _TOKEN_IDS[token]
 
     def batch_decode(self, generated: object, skip_special_tokens: bool = True) -> list[str]:
+        if isinstance(generated, list):  # several beams
+            return [f" {beam} " for beam in generated]
         return [f" decoded:{generated} "]
 
 
 class FakeModel:
     def __init__(self) -> None:
         self.last_forced_bos_token_id: int | None = None
+        self.last_kwargs: dict[str, object] = {}
 
-    def generate(self, **kwargs: object) -> str:
+    def generate(self, **kwargs: object) -> object:
         self.last_forced_bos_token_id = kwargs.get("forced_bos_token_id")  # type: ignore[assignment]
+        self.last_kwargs = kwargs
+        if kwargs.get("num_return_sequences", 1) != 1:
+            return ["best", "short", "short", "other"]  # a repeat, as beam search can give
         return "GENERATED"
 
 
@@ -144,3 +150,27 @@ def test_lazy_load_happens_once_across_two_calls(mock_ml_deps: None) -> None:
 
     assert FakeAutoTokenizer.load_count == 1
     assert FakeAutoModelForSeq2SeqLM.load_count == 1
+
+
+def test_candidates_come_back_best_first_without_repeats(mock_ml_deps: None) -> None:
+    provider = NLLBTranslationProvider()
+
+    result = provider.translate_candidates("Hello", "en", "hi", count=4)
+
+    assert result == ["best", "short", "other"]
+    model = FakeAutoModelForSeq2SeqLM.instance
+    assert model is not None
+    assert model.last_kwargs["num_beams"] == 4
+    assert model.last_kwargs["num_return_sequences"] == 4
+    assert model.last_forced_bos_token_id == _TOKEN_IDS["hin_Deva"]
+
+
+def test_a_single_candidate_is_the_plain_translation(mock_ml_deps: None) -> None:
+    provider = NLLBTranslationProvider()
+
+    assert provider.translate_candidates("Hello", "en", "hi", count=1) == ["decoded:GENERATED"]
+
+
+def test_candidates_for_blank_text_is_blank(mock_ml_deps: None) -> None:
+    assert NLLBTranslationProvider().translate_candidates("  ", "en", "hi", count=3) == [""]
+    assert FakeAutoTokenizer.load_count == 0

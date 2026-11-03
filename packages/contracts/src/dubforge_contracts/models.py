@@ -21,6 +21,9 @@ class SpeakerSegment(BaseModel):
 class AudioResult(BaseModel):
     audio_path: str
     actual_duration_ms: int
+    # How much faster than its natural pace the voice was asked to speak (1.0 = natural).
+    # None means this is not a real voice (the mock), so nothing can be learned from it.
+    speech_rate: float | None = None
 
 
 class JobStatus(StrEnum):
@@ -56,7 +59,9 @@ class SegmentAudioStatus(StrEnum):
 
 
 AUDIO_MISMATCH_ABS_TOLERANCE_MS = 300
-AUDIO_MISMATCH_REL_TOLERANCE = 0.15
+# 0.25 matches MAX_ATEMPO (1.25) in dubforge_pipeline.export_assembly: audio up to
+# 25% longer than its slot can be sped up to fit at export time.
+AUDIO_MISMATCH_REL_TOLERANCE = 0.25
 
 
 class MediaRead(BaseModel):
@@ -115,9 +120,24 @@ class Artifact(BaseModel):
     updated_at: datetime
 
 
-def compute_audio_status(segment_duration_ms: int, artifact: Artifact | None) -> SegmentAudioStatus:
+def segment_room_ms(start_ms: int, duration_ms: int, next_start_ms: int | None) -> int:
+    """How long a dub may run: from this line's start to the next line's start.
+
+    The spoken line itself is only part of it; the silence before the next line is free
+    room, and the export step places audio the same way. The last line has no next line,
+    so its room is just its own length.
+    """
+    if next_start_ms is None:
+        return duration_ms
+    return max(duration_ms, next_start_ms - start_ms)
+
+
+def compute_audio_status(
+    segment_duration_ms: int, artifact: Artifact | None, room_ms: int | None = None
+) -> SegmentAudioStatus:
     """Derive a single usable-audio status from a segment's expected
-    duration and its (possibly absent) dubbed-audio artifact."""
+    duration (and the room it may spill into) and its (possibly absent) dubbed-audio
+    artifact."""
 
     if artifact is None:
         return SegmentAudioStatus.NO_AUDIO
@@ -128,13 +148,13 @@ def compute_audio_status(segment_duration_ms: int, artifact: Artifact | None) ->
     if artifact.status == ArtifactStatus.OUTDATED:
         return SegmentAudioStatus.OUTDATED
 
-    # COMPLETED: compare actual vs expected duration against tolerance.
+    # COMPLETED: only audio LONGER than its room beyond tolerance is a mismatch;
+    # shorter audio just leaves silence, which is fine.
     if artifact.duration_ms is None:
         return SegmentAudioStatus.MISMATCH
-    tolerance_ms = max(
-        AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * segment_duration_ms
-    )
-    if abs(artifact.duration_ms - segment_duration_ms) > tolerance_ms:
+    available_ms = max(room_ms or 0, segment_duration_ms)
+    tolerance_ms = max(AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * available_ms)
+    if artifact.duration_ms - available_ms > tolerance_ms:
         return SegmentAudioStatus.MISMATCH
     return SegmentAudioStatus.READY
 
@@ -154,6 +174,8 @@ class Segment(BaseModel):
     start_ms: int
     end_ms: int
     duration_ms: int
+    # how long a dub may run: up to the next line's start (see segment_room_ms)
+    room_ms: int | None = None
     speaker_label: str
     text: str
     translated_text: str | None = None
@@ -188,6 +210,9 @@ class ArtifactQueueMessage(BaseModel):
     artifact_id: uuid.UUID
     segment_id: uuid.UUID
     text: str
+    # The segment's slot length. The worker time-fits the generated audio to it when it is
+    # close enough to stretch without sounding rushed. None = leave the audio as generated.
+    target_duration_ms: int | None = None
 
 
 class ArtifactCallbackUpdate(BaseModel):

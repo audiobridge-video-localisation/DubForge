@@ -11,7 +11,7 @@ from dubforge_pipeline.providers.edge_tts import EdgeTTSProvider, _resolve_voice
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 
 
-def _write_fake_speech_mp3(path: Path) -> None:
+def _write_fake_speech_mp3(path: Path, seconds: float = 1.0) -> None:
     subprocess.run(
         [
             "ffmpeg",
@@ -19,7 +19,7 @@ def _write_fake_speech_mp3(path: Path) -> None:
             "-f",
             "lavfi",
             "-i",
-            "sine=frequency=440:duration=1",
+            f"sine=frequency=440:duration={seconds}",
             "-codec:a",
             "libmp3lame",
             str(path),
@@ -33,22 +33,27 @@ def _write_fake_speech_mp3(path: Path) -> None:
 class FakeCommunicate:
     fail_with: Exception | None = None
     save_calls = 0
+    rates: list[str] = []
 
-    def __init__(self, text: str, voice: str) -> None:
+    def __init__(self, text: str, voice: str, rate: str = "+0%") -> None:
         self.text = text
         self.voice = voice
+        self.rate = rate
 
     async def save(self, path: str) -> None:
         FakeCommunicate.save_calls += 1
+        FakeCommunicate.rates.append(self.rate)
         if FakeCommunicate.fail_with is not None:
             raise FakeCommunicate.fail_with
-        _write_fake_speech_mp3(Path(path))
+        # a faster rate makes the fake take shorter, like the real service
+        _write_fake_speech_mp3(Path(path), seconds=1.0 / (1 + int(self.rate.rstrip("%")) / 100))
 
 
 @pytest.fixture(autouse=True)
 def _reset_fake_communicate() -> None:
     FakeCommunicate.fail_with = None
     FakeCommunicate.save_calls = 0
+    FakeCommunicate.rates = []
 
 
 @pytest.fixture
@@ -82,12 +87,24 @@ def test_synthesize_produces_wav(tmp_path: Path, mock_edge_tts: None) -> None:
     assert FakeCommunicate.save_calls == 1
 
 
-def test_synthesize_ignores_target_duration_ms(tmp_path: Path, mock_edge_tts: None) -> None:
+def test_synthesize_keeps_a_take_that_is_not_too_long(tmp_path: Path, mock_edge_tts: None) -> None:
     provider = EdgeTTSProvider(output_dir=str(tmp_path))
     result = provider.synthesize("Hello there.", "hi", target_duration_ms=999_999)
 
-    # actual_duration_ms reflects the real synthesized audio, not the ignored target
-    assert result.actual_duration_ms != 999_999
+    assert FakeCommunicate.rates == ["+0%"]
+    assert result.speech_rate == 1.0
+    assert result.actual_duration_ms != 999_999  # the real audio length, never the target
+
+
+def test_synthesize_speaks_faster_when_the_take_is_too_long(
+    tmp_path: Path, mock_edge_tts: None
+) -> None:
+    provider = EdgeTTSProvider(output_dir=str(tmp_path))
+    result = provider.synthesize("Hello there.", "hi", target_duration_ms=500)
+
+    assert FakeCommunicate.rates == ["+0%", "+30%"]  # capped at a natural speed-up
+    assert result.speech_rate == pytest.approx(1.3)
+    assert result.actual_duration_ms < 900  # about 1000 / 1.3
 
 
 def test_synthesize_empty_text_does_not_raise(tmp_path: Path, mock_edge_tts: None) -> None:

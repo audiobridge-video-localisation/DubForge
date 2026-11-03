@@ -24,11 +24,13 @@ from dubforge_contracts.models import (
     SpeakerSegment,
     TranscriptSegment,
 )
-from dubforge_pipeline.audio import extract_audio
+from dubforge_pipeline.audio import extract_audio, fit_audio_duration
 from dubforge_pipeline.export_assembly import (
+    apply_tempo,
     build_dub_audio_track,
     encode_mp3,
     mux_mp4,
+    plan_placements,
     probe_duration_ms,
 )
 from dubforge_pipeline.logging_config import configure_logging
@@ -41,6 +43,7 @@ from dubforge_pipeline.providers.registry import (
     get_tts_provider,
 )
 from dubforge_pipeline.segments import combine_segments, translate_segments
+from dubforge_pipeline.speech_rate import get_ms_per_char, record_take
 from dubforge_pipeline.timing import merge_short_segments
 
 logger = logging.getLogger(__name__)
@@ -103,6 +106,11 @@ def _get_tts_provider() -> TTSProvider:
     return _tts_provider_cache
 
 
+def _voice_key(lang: str) -> str:
+    """What the learned speech rate is filed under: a voice speaks at its own pace."""
+    return f"{type(_get_tts_provider()).__name__}:{lang}"
+
+
 def reset_provider_cache() -> None:
     """Test hook: clear cached providers so tests can swap env/providers freely."""
     global _translator_cache, _tts_provider_cache
@@ -144,7 +152,7 @@ def _persist_artifact_audio(audio_path: str, storage_root: str, artifact_id: str
     suffix = source.suffix or ".wav"
     destination = artifacts_dir / f"{artifact_id}{suffix}"
     shutil.move(str(source), str(destination))
-    return str(destination.relative_to(Path(storage_root)))
+    return destination.relative_to(Path(storage_root)).as_posix()
 
 
 def _submit_segments(
@@ -212,7 +220,12 @@ def process_job(
         src_lang = os.environ.get("SOURCE_LANG", "en")
         tgt_lang = _get_target_lang()
         segments = translate_segments(
-            segments, _get_translator(), src_lang=src_lang, tgt_lang=tgt_lang
+            segments,
+            _get_translator(),
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            # pick translations that the voice can say in the time each line has
+            ms_per_char=get_ms_per_char(storage_root, _voice_key(tgt_lang)),
         )
 
         _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=90)
@@ -239,8 +252,29 @@ def process_artifact(
 
     try:
         voice_profile = _get_target_lang()
-        result = _get_tts_provider().synthesize(message.text, voice_profile=voice_profile)
-        relative_audio_path = _persist_artifact_audio(result.audio_path, storage_root, artifact_id)
+        result = _get_tts_provider().synthesize(
+            message.text,
+            voice_profile=voice_profile,
+            target_duration_ms=message.target_duration_ms,
+        )
+        audio_path, duration_ms = result.audio_path, result.actual_duration_ms
+        if result.speech_rate is not None:
+            record_take(
+                storage_root,
+                _voice_key(voice_profile),
+                message.text,
+                result.actual_duration_ms,
+                result.speech_rate,
+            )
+        if message.target_duration_ms is not None:
+            try:
+                audio_path, duration_ms = fit_audio_duration(
+                    audio_path, duration_ms, message.target_duration_ms
+                )
+            except RuntimeError:
+                # an unfitted take can still be reviewed (it just shows as a mismatch)
+                logger.warning("Artifact %s: could not fit audio to its slot", artifact_id)
+        relative_audio_path = _persist_artifact_audio(audio_path, storage_root, artifact_id)
     except Exception as exc:  # defensive: never let a bad artifact crash the worker loop
         logger.exception("Artifact %s failed", artifact_id)
         _report_artifact(
@@ -253,7 +287,7 @@ def process_artifact(
         artifact_id,
         ArtifactStatus.COMPLETED,
         audio_path=relative_audio_path,
-        duration_ms=result.actual_duration_ms,
+        duration_ms=duration_ms,
         voice_profile=voice_profile,
     )
 
@@ -296,7 +330,8 @@ def process_export_job(
         video_path = str(Path(storage_root) / message.media_storage_path)
         total_duration_ms = probe_duration_ms(video_path)
 
-        segment_audio: list[tuple[int, str]] = []
+        audio_paths: list[str] = []
+        timings: list[tuple[int, int, int]] = []
         for segment in segments:
             if segment.artifact is None or segment.artifact.audio_path is None:
                 raise RuntimeError(f"segment {segment.id} has no usable audio artifact")
@@ -305,11 +340,25 @@ def process_export_job(
                 raise RuntimeError(
                     f"audio file missing on disk for segment {segment.id}: {abs_path}"
                 )
-            segment_audio.append((segment.start_ms, abs_path))
+            audio_ms = segment.artifact.duration_ms or probe_duration_ms(abs_path)
+            audio_paths.append(abs_path)
+            timings.append((segment.start_ms, segment.end_ms, audio_ms))
+
+        placements = plan_placements(timings, total_duration_ms)
 
         _report_export(client, api_base_url, export_job_id, JobStatus.PROCESSING, progress=30)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
+            segment_audio: list[tuple[int, str]] = []
+            for index, (placement, abs_path) in enumerate(
+                zip(placements, audio_paths, strict=True)
+            ):
+                if placement.tempo > 1.0:
+                    stretched_path = str(Path(tmp_dir) / f"segment_{index}_tempo.wav")
+                    apply_tempo(abs_path, stretched_path, placement.tempo)
+                    abs_path = stretched_path
+                segment_audio.append((placement.start_ms, abs_path))
+
             dub_wav = str(Path(tmp_dir) / "dub_track.wav")
             build_dub_audio_track(segment_audio, total_duration_ms, dub_wav)
             _report_export(client, api_base_url, export_job_id, JobStatus.PROCESSING, progress=60)
@@ -330,7 +379,7 @@ def process_export_job(
         )
         return
 
-    relative_output = str(output_path.relative_to(Path(storage_root)))
+    relative_output = output_path.relative_to(Path(storage_root)).as_posix()
     _report_export(
         client,
         api_base_url,

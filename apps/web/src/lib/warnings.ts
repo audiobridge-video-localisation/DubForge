@@ -9,10 +9,11 @@ export interface Warning {
   detail: string;
 }
 
-// Mirrors compute_audio_status in packages/contracts: a dub fits when it is within
-// max(0.3 s, 15%) of the original line.
+// Mirrors compute_audio_status in packages/contracts: a dub only counts as a mismatch
+// when it is LONGER than its room (the line plus the silence before the next line) by more
+// than max(0.3 s, 25%). Shorter is fine.
 const MISMATCH_ABS_MS = 300;
-const MISMATCH_REL = 0.15;
+const MISMATCH_REL = 0.25;
 // Past this share of the tolerance, a line fits today but a small edit will break it.
 const NEAR_LIMIT = 0.8;
 
@@ -31,6 +32,10 @@ export function canRetryStalledJob(
 ): boolean {
   const inFlight = job.status === "pending" || job.status === "processing";
   return inFlight && now - new Date(job.updated_at).getTime() > STALL_RETRY_MS;
+}
+
+function roomOf(s: { duration_ms: number; room_ms?: number | null }): number {
+  return Math.max(s.room_ms ?? 0, s.duration_ms);
 }
 
 function tolerance(durationMs: number): number {
@@ -96,8 +101,8 @@ export function deriveWarnings(
   const tight = segments.filter((s) => {
     const dubbed = s.artifact?.duration_ms;
     if (s.audio_status !== "ready" || dubbed == null) return false;
-    const limit = tolerance(s.duration_ms);
-    return Math.abs(dubbed - s.duration_ms) > limit * NEAR_LIMIT;
+    const limit = tolerance(roomOf(s));
+    return dubbed - roomOf(s) > limit * NEAR_LIMIT;
   });
   if (tight.length > 0) {
     warnings.push({

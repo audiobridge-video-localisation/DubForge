@@ -34,7 +34,7 @@ It keeps the downloaded models. If your compose needs an env file, set `DEMO_ENV
 | 8 | Scroll to **Export center**. | "This says exactly what stands between us and an export." | "1 thing is blocking export: 1 line needs changes. Line 2." Export buttons are disabled. |
 | 9 | Fix and approve the line. Click **Generate dubbed audio**. | "Now it makes the voice for each line." | Audio states move pending → ready. |
 | 10 | Press **Play dub** on a line. | "Each line can be heard on its own." | The clip plays (silent on mock). |
-| 11 | Make one translation very long, save, **Regenerate**. | "Small timing problems fix themselves." | Small gaps are time-fitted. A big gap stays flagged "wrong length" and appears in the Export center. |
+| 11 | Make one translation very long, save, **Regenerate**. | "Small timing problems fix themselves." | Small gaps are time-fitted. A dub far longer than its slot stays flagged "too long" and appears in the Export center. |
 | 12 | Back in **Export center**, clear every blocker. | "Ready means every line is approved and has usable audio." | "Ready to export", the project summary, and the export buttons enabled. |
 | 13 | Click **Export MP3** and **Export MP4**. | "Exports run in the background." | A progress bar, then **Download**. |
 | 14 | **Refresh the page** while an export runs, then after it finishes. | "Nothing is stored in the browser. The page asks the server." | The same export state comes back; finished exports still offer **Download**. |
@@ -66,6 +66,10 @@ Sample video: a short test clip (mock speech-to-text returns two lines); stack r
 22 of 22 steps passed: create project (including the blank-name error); upload refusals (.pdf, empty, no extension); two-file drop notice; upload and processing; Export center blockers and locked export; click a line to seek the source video; speaker colours; edit with the "Unsaved changes" label; request changes shown as a blocker; approve; generate audio; export unlock and summary; MP3 and MP4 export with Download links; mark ready; "audio changed after this export" note; and a **refresh** in a brand-new window, which restored the exports from the API; no JS errors logged.
 
 This runs the real app code, but it is not a real browser: there is no layout or styling, and no actual audio or video playback.
+
+### Run 3 — real providers (Whisper, NLLB, local MMS voice), 21-second TED clip
+
+7 lines, real Hindi, 7 of 7 dubbed lines ready on the first try; MP3 and MP4 exports have real sound. Each line's room (its own time plus the silence before the next line) is used for the timing rule; the translator offers 6 alternatives per line and the one that fits is used; the voice speaks faster only when a take runs long (4 of 7 lines stayed at natural speed). The speech speed of the voice is learned from its own output (about 83 ms per character here).
 
 ### Run 4 — the plan's October 31 acceptance test, real providers, `samples/demo-speech.mp4`
 
