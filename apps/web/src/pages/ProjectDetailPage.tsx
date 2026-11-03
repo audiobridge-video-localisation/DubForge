@@ -581,7 +581,7 @@ export function ProjectDetailPage() {
 
   return (
     <main className="project-page">
-      <Link className="back-link" to="/">
+      <Link className="back-link" to="/app">
         &larr; Back to projects
       </Link>
       {loading && <p>Loading project…</p>}

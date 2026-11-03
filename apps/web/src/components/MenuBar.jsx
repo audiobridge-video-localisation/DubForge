@@ -102,7 +102,7 @@ function Logo() {
   }, []);
 
   return (
-    <a className="logo-link" href="#" ref={link} aria-label={`${brand} home`}>
+    <a className="logo-link" href="/" ref={link} aria-label={`${brand} home`}>
       <svg
         className="logo-glyph"
         viewBox="0 0 64 32"
@@ -164,7 +164,7 @@ export default function MenuBar() {
             style={{ left: hover.left, width: hover.width }}
             aria-hidden="true"
           />
-          <a className="brand" href="#">
+          <a className="brand" href="/">
             {brand}
           </a>
           {navLinks.map((l) => (
