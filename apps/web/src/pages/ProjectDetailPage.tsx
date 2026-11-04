@@ -275,11 +275,17 @@ export function ProjectDetailPage() {
     }
   }
 
-  async function handleExport(mediaId: string, kind: ExportKind) {
+  async function handleExport(
+    mediaId: string,
+    kind: ExportKind,
+    acceptLongLines = false,
+  ) {
     setExportError((current) => ({ ...current, [mediaId]: null }));
     try {
       const job =
-        kind === "mp3" ? await exportMp3(mediaId) : await exportMp4(mediaId);
+        kind === "mp3"
+          ? await exportMp3(mediaId, acceptLongLines)
+          : await exportMp4(mediaId, acceptLongLines);
       setExportJobs((current) => ({
         ...current,
         [mediaId]: { ...current[mediaId], [kind]: job },

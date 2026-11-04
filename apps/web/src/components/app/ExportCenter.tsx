@@ -47,7 +47,11 @@ export interface ExportCenterProps {
   exportsLoad: ExportsLoad;
   exportError: string | null;
   onReloadExports: () => void;
-  onExport: (mediaId: string, kind: ExportKind) => void;
+  onExport: (
+    mediaId: string,
+    kind: ExportKind,
+    acceptLongLines?: boolean,
+  ) => void;
 }
 
 function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
@@ -73,6 +77,9 @@ export function ExportCenter({
   const { summary } = state;
   const allApproved = state.total > 0 && state.approved === state.total;
   const allAudio = state.total > 0 && state.audioReady === state.total;
+  // long dubs alone never stop an export: the video pauses on a frame for them
+  const exportable = state.ready || state.canExportAnyway;
+  const pausing = !state.ready && state.canExportAnyway;
 
   return (
     <section className="export-center" aria-label="Export center">
@@ -82,11 +89,13 @@ export function ExportCenter({
           <p>
             {state.ready
               ? "Everything is approved and has usable audio."
-              : "Finish the items below to unlock the dubbed export."}
+              : pausing
+                ? "Ready. The video pauses briefly under the long lines below."
+                : "Finish the items below to unlock the dubbed export."}
           </p>
         </div>
-        <StatusBadge tone={state.ready ? "ok" : "warn"}>
-          {state.ready ? "Ready to export" : "Not ready yet"}
+        <StatusBadge tone={state.ready ? "ok" : pausing ? "info" : "warn"}>
+          {exportable ? "Ready to export" : "Not ready yet"}
         </StatusBadge>
       </header>
 
@@ -109,11 +118,16 @@ export function ExportCenter({
           </ul>
 
           {state.blockers.length > 0 ? (
-            <div className="xc-blockers" role="status">
+            <div
+              className={pausing ? "xc-blockers xc-pausing" : "xc-blockers"}
+              role="status"
+            >
               <strong>
-                {state.blockers.length === 1
-                  ? "1 thing is blocking export"
-                  : `${state.blockers.length} things are blocking export`}
+                {pausing
+                  ? "Nothing is blocking export"
+                  : state.blockers.length === 1
+                    ? "1 thing is blocking export"
+                    : `${state.blockers.length} things are blocking export`}
               </strong>
               <ul>
                 {state.blockers.map((blocker) => (
@@ -186,7 +200,7 @@ export function ExportCenter({
         <div className="deliver-col">
           <h3>Dubbed output</h3>
           <p>
-            {state.ready
+            {exportable
               ? "Choose a format. Each export runs in the background."
               : "Locked until nothing is blocking export."}
           </p>
@@ -199,8 +213,8 @@ export function ExportCenter({
                   key={kind}
                   type="button"
                   className="btn btn-sm btn-primary"
-                  disabled={!state.ready || inFlight(job)}
-                  onClick={() => onExport(media.id, kind)}
+                  disabled={!exportable || inFlight(job)}
+                  onClick={() => onExport(media.id, kind, pausing)}
                 >
                   {retrying
                     ? `Retry ${kind.toUpperCase()} export`

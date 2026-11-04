@@ -34,7 +34,8 @@ export function isArtifactInFlight(artifact: Artifact | null): boolean {
 }
 
 export function isAudioProblem(status: SegmentAudioStatus): boolean {
-  return status === "failed" || status === "mismatch" || status === "outdated";
+  // a long dub ("mismatch") is not a problem to regenerate: the export pauses the video for it
+  return status === "failed" || status === "outdated";
 }
 
 export function isJobInFlight(job: Job): boolean {

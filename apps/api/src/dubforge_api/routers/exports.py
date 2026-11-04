@@ -80,10 +80,14 @@ async def export_vtt(media_id: uuid.UUID, db: AsyncSession = Depends(get_db)) ->
 
 
 async def _create_export_job(
-    media_id: uuid.UUID, kind: ExportKind, db: AsyncSession, redis: Redis
+    media_id: uuid.UUID,
+    kind: ExportKind,
+    db: AsyncSession,
+    redis: Redis,
+    accept_long_lines: bool = False,
 ) -> ExportJob:
     media = await _load_media_or_404(media_id, db)
-    await require_dub_ready(media_id, db, "exporting")
+    await require_dub_ready(media_id, db, "exporting", accept_long_lines=accept_long_lines)
 
     export_job = ExportJob(
         media_id=media_id, kind=kind.value, status=JobStatus.PENDING.value, progress=0
@@ -110,16 +114,22 @@ async def _create_export_job(
 
 @media_export_router.post("/{media_id}/export/mp3", response_model=ExportJobRead, status_code=201)
 async def export_mp3(
-    media_id: uuid.UUID, db: AsyncSession = Depends(get_db), redis: Redis = Depends(get_redis)
+    media_id: uuid.UUID,
+    accept_long_lines: bool = False,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> ExportJob:
-    return await _create_export_job(media_id, ExportKind.MP3, db, redis)
+    return await _create_export_job(media_id, ExportKind.MP3, db, redis, accept_long_lines)
 
 
 @media_export_router.post("/{media_id}/export/mp4", response_model=ExportJobRead, status_code=201)
 async def export_mp4(
-    media_id: uuid.UUID, db: AsyncSession = Depends(get_db), redis: Redis = Depends(get_redis)
+    media_id: uuid.UUID,
+    accept_long_lines: bool = False,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> ExportJob:
-    return await _create_export_job(media_id, ExportKind.MP4, db, redis)
+    return await _create_export_job(media_id, ExportKind.MP4, db, redis, accept_long_lines)
 
 
 @media_export_router.get("/{media_id}/exports", response_model=list[ExportJobRead])

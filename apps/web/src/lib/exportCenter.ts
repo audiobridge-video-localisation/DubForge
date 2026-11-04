@@ -36,6 +36,10 @@ export interface ExportCenterState {
   audioReady: number;
   blockers: Blocker[];
   ready: boolean;
+  /** only dubs too long to fit stand in the way: the export pauses the video for them */
+  canExportAnyway: boolean;
+  /** the lines the export pauses the video for */
+  longLines: number[];
   summary: ExportSummary;
 }
 
@@ -86,7 +90,7 @@ export function deriveExportCenter(item: MediaWithJob): ExportCenterState {
   add(
     "mismatch",
     lines((s) => s.audio_status === "mismatch"),
-    "The dub is too long to fit before the next line. Shorten the translation or widen the line, then regenerate.",
+    "Even sped up, the dub runs past the slowed video, so the export pauses the picture on a frame until it ends. Shorten the translation if you'd rather it didn't.",
   );
 
   const voices = Array.from(
@@ -97,15 +101,21 @@ export function deriveExportCenter(item: MediaWithJob): ExportCenterState {
     ),
   );
 
+  const ready =
+    total_count > 0 &&
+    approved_count === total_count &&
+    usable_audio_count === total_count;
+  const longLines = found.find((b) => b.kind === "mismatch")?.lines ?? [];
+
   return {
     approved: approved_count,
     total: total_count,
     audioReady: usable_audio_count,
     blockers: found,
-    ready:
-      total_count > 0 &&
-      approved_count === total_count &&
-      usable_audio_count === total_count,
+    ready,
+    canExportAnyway:
+      !ready && found.length > 0 && found.every((b) => b.kind === "mismatch"),
+    longLines,
     summary: {
       lineCount: total_count,
       speakerCount: new Set(segments.map((s) => s.speaker_label)).size,
@@ -126,7 +136,8 @@ const BLOCKER_TITLES: Record<BlockerKind, (n: number) => string> = {
     `${n} ${n === 1 ? "line is" : "lines are"} still being generated`,
   failed: (n) => `Audio failed for ${n} ${n === 1 ? "line" : "lines"}`,
   outdated: (n) => `${n} ${n === 1 ? "line has" : "lines have"} outdated audio`,
-  mismatch: (n) => `${n} dubbed ${n === 1 ? "line is" : "lines are"} too long`,
+  mismatch: (n) =>
+    `The picture pauses briefly under ${n} ${n === 1 ? "line" : "lines"}`,
 };
 
 export function blockerTitle(blocker: Blocker): string {
