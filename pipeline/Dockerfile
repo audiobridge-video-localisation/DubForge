@@ -26,15 +26,21 @@ COPY pipeline/pyproject.toml pipeline/pyproject.toml
 COPY packages/contracts/pyproject.toml packages/contracts/pyproject.toml
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 
+# Optional model extras, e.g. --build-arg PIPELINE_EXTRAS="nllb tts-edge" (empty = base image).
+# torch pulls several GB, so these are opt-in.
+ARG PIPELINE_EXTRAS=""
+
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-install-workspace --package dubforge-pipeline
+    uv sync --locked --no-dev --no-install-workspace --package dubforge-pipeline \
+        $(for extra in $PIPELINE_EXTRAS; do printf -- '--extra %s ' "$extra"; done)
 
 # 2) Source code -> install workspace packages (fast, deps already cached)
 COPY packages/contracts/src packages/contracts/src
 COPY pipeline/src pipeline/src
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --package dubforge-pipeline
+    uv sync --locked --no-dev --package dubforge-pipeline \
+        $(for extra in $PIPELINE_EXTRAS; do printf -- '--extra %s ' "$extra"; done)
 
 # Writable dir for job media; everything else stays read-only and root-owned
 RUN mkdir -p /app/data && chown appuser:appuser /app/data

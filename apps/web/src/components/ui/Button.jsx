@@ -1,3 +1,4 @@
+import SmartLink from "./SmartLink.jsx";
 import "./Button.css";
 
 export default function Button({
@@ -7,9 +8,9 @@ export default function Button({
   ...props
 }) {
   return (
-    <a className={`btn ${variant}`} href="#" {...props}>
+    <SmartLink className={`btn ${variant}`} {...props}>
       {icon}
       {children}
-    </a>
+    </SmartLink>
   );
 }

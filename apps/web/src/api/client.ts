@@ -98,23 +98,39 @@ export interface ExportJob {
   updated_at: string;
 }
 
-async function parseErrorMessage(response: Response): Promise<string> {
+const NETWORK_ERROR =
+  "Couldn't reach the DubForge API. Check that it is running, then try again.";
+
+function detailFrom(status: number, body: string): string {
   try {
-    const body = await response.json();
-    if (typeof body.detail === "string") {
-      return body.detail;
-    }
+    const parsed = JSON.parse(body);
+    if (typeof parsed.detail === "string") return parsed.detail;
   } catch {
     // response had no JSON body
   }
-  return `Request failed with status ${response.status}`;
+  if (status === 413) {
+    return "The server refused this file because it is too large. Try a smaller or shorter video.";
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return "The DubForge API isn't responding right now. Wait a moment and try again.";
+  }
+  return `Request failed with status ${status}`;
+}
+
+async function parseErrorMessage(response: Response): Promise<string> {
+  return detailFrom(response.status, await response.text());
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...init,
+    });
+  } catch {
+    throw new Error(NETWORK_ERROR);
+  }
 
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
@@ -138,23 +154,54 @@ export function createProject(name: string): Promise<Project> {
   });
 }
 
-export async function uploadMedia(
+export interface UploadOptions {
+  /** called with 0-100 as the file is sent */
+  onProgress?: (percent: number) => void;
+  signal?: AbortSignal;
+}
+
+// XMLHttpRequest rather than fetch: fetch cannot report upload progress.
+export function uploadMedia(
   projectId: string,
   file: File,
+  { onProgress, signal }: UploadOptions = {},
 ): Promise<MediaWithJob> {
-  const formData = new FormData();
-  formData.append("file", file);
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("file", file);
 
-  const response = await fetch(`${API_URL}/projects/${projectId}/media`, {
-    method: "POST",
-    body: formData,
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/projects/${projectId}/media`);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as MediaWithJob);
+        } catch {
+          reject(
+            new Error("The server sent a response that could not be read."),
+          );
+        }
+      } else {
+        reject(new Error(detailFrom(xhr.status, xhr.responseText)));
+      }
+    };
+    xhr.onerror = () => reject(new Error(NETWORK_ERROR));
+    xhr.onabort = () =>
+      reject(new DOMException("Upload cancelled", "AbortError"));
+
+    signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+    if (signal?.aborted) {
+      xhr.abort();
+      return;
+    }
+    xhr.send(formData);
   });
-
-  if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
-  }
-
-  return response.json() as Promise<MediaWithJob>;
 }
 
 export function getJob(jobId: string): Promise<Job> {
@@ -205,6 +252,11 @@ export function exportMp4(mediaId: string): Promise<ExportJob> {
   return request<ExportJob>(`/media/${mediaId}/export/mp4`, { method: "POST" });
 }
 
+/** The latest export job of each kind for a video, so state survives a page reload. */
+export function listMediaExports(mediaId: string): Promise<ExportJob[]> {
+  return request<ExportJob[]>(`/media/${mediaId}/exports`);
+}
+
 export function getExportJob(exportJobId: string): Promise<ExportJob> {
   return request<ExportJob>(`/export-jobs/${exportJobId}`);
 }
@@ -219,4 +271,14 @@ export function vttDownloadUrl(mediaId: string): string {
 
 export function exportDownloadUrl(exportJobId: string): string {
   return `${API_URL}/export-jobs/${exportJobId}/download`;
+}
+
+export function sourceMediaUrl(mediaId: string): string {
+  return `${API_URL}/media/${mediaId}/source`;
+}
+
+// `version` changes when the line's audio is regenerated, so the browser never plays a
+// cached older take.
+export function segmentAudioUrl(segmentId: string, version: string): string {
+  return `${API_URL}/segments/${segmentId}/audio?v=${encodeURIComponent(version)}`;
 }

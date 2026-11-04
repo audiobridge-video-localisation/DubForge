@@ -1,4 +1,5 @@
 import { brand, builtWith, footerColumns } from "../data/content.js";
+import SmartLink from "./ui/SmartLink.jsx";
 import "./Footer.css";
 
 export default function Footer() {
@@ -9,9 +10,9 @@ export default function Footer() {
           <div key={col.title}>
             <h6>{col.title}</h6>
             {col.links.map(([label, href]) => (
-              <a key={label} href={href}>
+              <SmartLink key={label} href={href}>
                 {label}
-              </a>
+              </SmartLink>
             ))}
           </div>
         ))}

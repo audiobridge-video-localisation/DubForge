@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str
     storage_dir: str = "./media"
+    # a pending/processing job with no update for this long is treated as interrupted (for
+    # example the worker was restarted mid-job) and may be retried by hand
+    job_stall_retry_seconds: int = 300
 
     @field_validator("storage_dir")
     @classmethod

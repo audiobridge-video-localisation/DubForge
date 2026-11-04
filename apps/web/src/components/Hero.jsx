@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import DeskWindow from "./ui/DeskWindow.jsx";
 import Button from "./ui/Button.jsx";
+import SmartLink from "./ui/SmartLink.jsx";
 import Draggable from "./ui/Draggable.jsx";
 import { langs } from "../data/langs.js";
 import { rows } from "../data/demo.js";
@@ -152,7 +153,7 @@ function Workspace({ phase, lang, running, onReplay, onPause, onStep }) {
               {step}
             </button>
           ))}
-          <a href="/app">Open editor ↗</a>
+          <SmartLink href="/app">Open editor ↗</SmartLink>
         </div>
         <div className="studio-table">
           <div className="studio-row studio-head">

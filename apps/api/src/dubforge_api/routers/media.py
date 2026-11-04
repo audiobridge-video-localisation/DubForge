@@ -2,23 +2,23 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from redis.asyncio import Redis
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dubforge_api.config import Settings, get_settings
 from dubforge_api.db import get_db
 from dubforge_api.models import Job, Media, Project
-from dubforge_api.models import Segment as SegmentModel
+from dubforge_api.readiness import require_dub_ready
 from dubforge_api.redis_client import get_redis
 from dubforge_api.schemas import MediaWithJob
+from dubforge_api.storage import resolve_stored_file
 from dubforge_contracts.models import (
     JOB_QUEUE_KEY,
     JobQueueMessage,
     JobRead,
     JobStatus,
     MediaRead,
-    SegmentReviewStatus,
 )
 
 router = APIRouter(prefix="/projects", tags=["media"])
@@ -69,23 +69,36 @@ async def mark_ready_for_dubbing(media_id: uuid.UUID, db: AsyncSession = Depends
     if media is None:
         raise HTTPException(status_code=404, detail="Media not found")
 
-    total_count = await db.scalar(
-        select(func.count()).select_from(SegmentModel).where(SegmentModel.media_id == media_id)
-    )
-    unapproved_count = await db.scalar(
-        select(func.count())
-        .select_from(SegmentModel)
-        .where(
-            SegmentModel.media_id == media_id,
-            SegmentModel.review_status != SegmentReviewStatus.APPROVED.value,
-        )
-    )
-    if not total_count or unapproved_count:
-        raise HTTPException(
-            status_code=409, detail="All segments must be approved before marking ready for dubbing"
-        )
+    await require_dub_ready(media_id, db, "marking ready for dubbing")
 
     media.ready_for_dubbing = True
     await db.commit()
     await db.refresh(media)
     return media
+
+
+_SOURCE_MEDIA_TYPES = {
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    ".mkv": "video/x-matroska",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+}
+
+
+@media_router.get("/{media_id}/source")
+async def get_source_media(
+    media_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    """The uploaded file, for playback in the review screen (supports range requests)."""
+    media = await db.get(Media, media_id)
+    if media is None:
+        raise HTTPException(status_code=404, detail="Media not found")
+    path = resolve_stored_file(settings.storage_dir, media.storage_path)
+    media_type = _SOURCE_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(path, media_type=media_type)

@@ -5,11 +5,13 @@ today — this is an internal trust-boundary callback target for the worker.
 """
 
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dubforge_api.config import Settings, get_settings
 from dubforge_api.db import get_db
 from dubforge_api.models import Artifact, ExportJob, Job, Media
 from dubforge_api.models import Segment as SegmentModel
@@ -29,6 +31,16 @@ from dubforge_contracts.models import (
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 
+def _remove_stored_file(storage_dir: str, relative_path: str | None) -> None:
+    """Best-effort delete of a file the database no longer refers to."""
+    if not relative_path:
+        return
+    root = Path(storage_dir).resolve()
+    path = (root / relative_path).resolve()
+    if path.is_relative_to(root):
+        path.unlink(missing_ok=True)
+
+
 @router.patch("/jobs/{job_id}", response_model=JobRead)
 async def update_job(
     job_id: uuid.UUID, payload: JobCallbackUpdate, db: AsyncSession = Depends(get_db)
@@ -41,7 +53,7 @@ async def update_job(
     if payload.progress is not None:
         job.progress = payload.progress
     if payload.error_message is not None:
-        job.error_message = payload.error_message[:2000]
+        job.error_message = payload.error_message[-2000:]
     await db.commit()
     await db.refresh(job, attribute_names=["updated_at"])
     return job
@@ -49,13 +61,30 @@ async def update_job(
 
 @router.put("/media/{media_id}/segments", status_code=status.HTTP_204_NO_CONTENT)
 async def replace_segments(
-    media_id: uuid.UUID, payload: list[Segment], db: AsyncSession = Depends(get_db)
+    media_id: uuid.UUID,
+    payload: list[Segment],
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> Response:
     media = await db.get(Media, media_id)
     if media is None:
         raise HTTPException(status_code=404, detail="Media not found")
 
+    # New segments mean a new transcript, so audio made for the old ones is meaningless (and
+    # still points at them): drop it, and the "ready for dubbing" mark that depended on it.
+    old_segment_ids = select(SegmentModel.id).where(SegmentModel.media_id == media_id)
+    old_audio = (
+        (
+            await db.execute(
+                select(Artifact.audio_path).where(Artifact.segment_id.in_(old_segment_ids))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    await db.execute(delete(Artifact).where(Artifact.segment_id.in_(old_segment_ids)))
     await db.execute(delete(SegmentModel).where(SegmentModel.media_id == media_id))
+    media.ready_for_dubbing = False
     db.add_all(
         SegmentModel(
             media_id=media_id,
@@ -70,6 +99,8 @@ async def replace_segments(
         for segment in payload
     )
     await db.commit()
+    for audio_path in old_audio:
+        _remove_stored_file(settings.storage_dir, audio_path)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -89,7 +120,7 @@ async def update_artifact(
     if payload.voice_profile is not None:
         artifact.voice_profile = payload.voice_profile
     if payload.error_message is not None:
-        artifact.error_message = payload.error_message[:2000]
+        artifact.error_message = payload.error_message[-2000:]
     await db.commit()
     await db.refresh(artifact, attribute_names=["updated_at"])
     return artifact
@@ -128,7 +159,7 @@ async def update_export_job(
     if payload.output_path is not None:
         export_job.output_path = payload.output_path
     if payload.error_message is not None:
-        export_job.error_message = payload.error_message[:2000]
+        export_job.error_message = payload.error_message[-2000:]
     await db.commit()
     await db.refresh(export_job, attribute_names=["updated_at"])
     return export_job

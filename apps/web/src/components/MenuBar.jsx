@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import useClock from "../hooks/useClock.js";
 import { brand, navLinks } from "../data/content.js";
 import { Bluetooth, Headphones, Wifi } from "./ui/Icons.jsx";
+import SmartLink from "./ui/SmartLink.jsx";
 import "./MenuBar.css";
 
 const clamp = (v, min = -1, max = 1) => Math.max(min, Math.min(max, v));
@@ -189,9 +190,9 @@ export default function MenuBar() {
           <Bluetooth />
           <span className="time">{time}</span>
         </div>
-        <a className="getbtn" href="/app">
+        <SmartLink className="getbtn" href="/app">
           open workspace <span aria-hidden="true">↗</span>
-        </a>
+        </SmartLink>
       </div>
     </header>
   );

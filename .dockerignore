@@ -13,3 +13,8 @@ apps/web
 .github
 docker-compose*.yml
 *.md
+media
+logs
+benchmarks
+**/dist
+**/node_modules
