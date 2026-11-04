@@ -1,0 +1,8 @@
+# Production add-on:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Always name both files, so the dev-only docker-compose.override.yml is never picked up.
+# Requires deploy/htpasswd (see DEPLOY.md); it is not committed.
+services:
+  web:
+    volumes:
+      - ./deploy/auth.conf:/etc/nginx/dubforge-auth.conf:ro
+      - ./deploy/htpasswd:/etc/nginx/.htpasswd:ro
