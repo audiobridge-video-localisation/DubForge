@@ -39,6 +39,14 @@ class SegmentReviewStatus(StrEnum):
     NEEDS_CHANGES = "needs_changes"
 
 
+class TranslationSource(StrEnum):
+    """Where a segment's translated text came from, so a person's edits are never overwritten."""
+
+    MACHINE = "machine"
+    EDITED = "edited"  # a person changed it
+    AUTO_SHORTENED = "auto_shortened"  # the worker swapped in a shorter wording to fit the time
+
+
 class ArtifactStatus(StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"
@@ -55,13 +63,26 @@ class SegmentAudioStatus(StrEnum):
     FAILED = "failed"
     OUTDATED = "outdated"
     MISMATCH = "mismatch"
+    # Longer than its room, but the export absorbs it by also slowing the video behind
+    # the line (see dubforge_pipeline.export_assembly.plan_timeline). Usable.
+    STRETCHED = "stretched"
     READY = "ready"
+
+
+# Statuses whose audio can go into an export.
+USABLE_AUDIO_STATUSES = frozenset({SegmentAudioStatus.READY, SegmentAudioStatus.STRETCHED})
 
 
 AUDIO_MISMATCH_ABS_TOLERANCE_MS = 300
 # 0.25 matches MAX_ATEMPO (1.25) in dubforge_pipeline.export_assembly: audio up to
 # 25% longer than its slot can be sped up to fit at export time.
 AUDIO_MISMATCH_REL_TOLERANCE = 0.25
+# The most the export slows the video behind a long line (setpts). Like a 1.25x speed-up,
+# 1.25x slower talking footage is hard to notice.
+MAX_VIDEO_SLOWDOWN = 1.25
+# Audio up to this many times its room fits with both: 1.25x faster speech over 1.25x
+# slower video. Longer than that is a mismatch a person has to look at.
+MAX_TIMELINE_STRETCH = (1 + AUDIO_MISMATCH_REL_TOLERANCE) * MAX_VIDEO_SLOWDOWN
 
 
 class MediaRead(BaseModel):
@@ -148,15 +169,18 @@ def compute_audio_status(
     if artifact.status == ArtifactStatus.OUTDATED:
         return SegmentAudioStatus.OUTDATED
 
-    # COMPLETED: only audio LONGER than its room beyond tolerance is a mismatch;
-    # shorter audio just leaves silence, which is fine.
+    # COMPLETED: only audio LONGER than its room beyond tolerance is a problem;
+    # shorter audio just leaves silence, which is fine. Longer audio the export can
+    # absorb by slowing the video is "stretched"; past that it is a mismatch.
     if artifact.duration_ms is None:
         return SegmentAudioStatus.MISMATCH
     available_ms = max(room_ms or 0, segment_duration_ms)
     tolerance_ms = max(AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * available_ms)
-    if artifact.duration_ms - available_ms > tolerance_ms:
-        return SegmentAudioStatus.MISMATCH
-    return SegmentAudioStatus.READY
+    if artifact.duration_ms - available_ms <= tolerance_ms:
+        return SegmentAudioStatus.READY
+    if artifact.duration_ms <= available_ms * MAX_TIMELINE_STRETCH:
+        return SegmentAudioStatus.STRETCHED
+    return SegmentAudioStatus.MISMATCH
 
 
 class Segment(BaseModel):
@@ -179,6 +203,7 @@ class Segment(BaseModel):
     speaker_label: str
     text: str
     translated_text: str | None = None
+    translation_source: TranslationSource = TranslationSource.MACHINE
     review_status: SegmentReviewStatus = SegmentReviewStatus.PENDING
     artifact: Artifact | None = None
     audio_status: SegmentAudioStatus = SegmentAudioStatus.NO_AUDIO
@@ -213,6 +238,10 @@ class ArtifactQueueMessage(BaseModel):
     # The segment's slot length. The worker time-fits the generated audio to it when it is
     # close enough to stretch without sounding rushed. None = leave the audio as generated.
     target_duration_ms: int | None = None
+    # The line in the source language, and whether the worker may swap in a shorter wording
+    # when the dub still does not fit. False once a person has edited the translation.
+    source_text: str | None = None
+    may_rewrite: bool = False
 
 
 class ArtifactCallbackUpdate(BaseModel):
@@ -223,6 +252,8 @@ class ArtifactCallbackUpdate(BaseModel):
     duration_ms: int | None = None
     voice_profile: str | None = None
     error_message: str | None = None
+    # Set when the worker shortened the wording to make the audio fit; the audio matches it.
+    translated_text: str | None = None
 
 
 class ExportKind(StrEnum):

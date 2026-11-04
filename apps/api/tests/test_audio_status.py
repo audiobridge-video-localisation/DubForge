@@ -112,6 +112,20 @@ async def test_completed_far_off_duration_is_mismatch(client: AsyncClient) -> No
     assert detail["media"][0]["segments"][0]["audio_status"] == "mismatch"
 
 
+async def test_stretched_dub_counts_as_usable_audio(client: AsyncClient) -> None:
+    # 1400ms in a 1000ms slot: past the tolerance, but the export slows the video for it
+    segment = await _seed_segment(client, duration_ms=1000)
+    artifact_id = (await client.post(f"/segments/{segment['id']}/regenerate")).json()["id"]
+    await client.patch(
+        f"/internal/artifacts/{artifact_id}",
+        json={"status": "completed", "audio_path": "/tmp/dub.wav", "duration_ms": 1400},
+    )
+
+    media = (await client.get(f"/projects/{segment['_project_id']}")).json()["media"][0]
+    assert media["segments"][0]["audio_status"] == "stretched"
+    assert media["usable_audio_count"] == 1
+
+
 async def test_usable_audio_count_reflects_only_ready_segments(client: AsyncClient) -> None:
     segment = await _seed_segment(client, duration_ms=1000)
     project_id = segment["_project_id"]

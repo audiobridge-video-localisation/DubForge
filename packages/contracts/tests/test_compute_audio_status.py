@@ -56,9 +56,22 @@ def test_completed_exactly_at_abs_tolerance_is_ready() -> None:
     assert compute_audio_status(1000, artifact) == SegmentAudioStatus.READY
 
 
-def test_completed_just_over_abs_tolerance_is_mismatch() -> None:
+def test_completed_just_over_abs_tolerance_is_stretched() -> None:
+    # past the tolerance, but the export can slow the video to make room
     artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=1301)
-    assert compute_audio_status(1000, artifact) == SegmentAudioStatus.MISMATCH
+    assert compute_audio_status(1000, artifact) == SegmentAudioStatus.STRETCHED
+
+
+def test_completed_past_what_the_export_can_absorb_is_mismatch() -> None:
+    # 1.25x faster speech over 1.25x slower video covers 1562.5ms of a 1000ms room
+    assert (
+        compute_audio_status(1000, _artifact(ArtifactStatus.COMPLETED, duration_ms=1562))
+        == SegmentAudioStatus.STRETCHED
+    )
+    assert (
+        compute_audio_status(1000, _artifact(ArtifactStatus.COMPLETED, duration_ms=1563))
+        == SegmentAudioStatus.MISMATCH
+    )
 
 
 def test_completed_much_shorter_than_slot_is_ready() -> None:
@@ -78,8 +91,10 @@ def test_completed_just_under_rel_tolerance_is_ready_for_long_segment() -> None:
     assert compute_audio_status(10000, artifact) == SegmentAudioStatus.READY
 
 
-def test_completed_just_over_rel_tolerance_is_mismatch_for_long_segment() -> None:
+def test_completed_just_over_rel_tolerance_is_stretched_for_long_segment() -> None:
     artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=12501)
+    assert compute_audio_status(10000, artifact) == SegmentAudioStatus.STRETCHED
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=15626)
     assert compute_audio_status(10000, artifact) == SegmentAudioStatus.MISMATCH
 
 
@@ -95,8 +110,10 @@ def test_dub_may_use_the_silence_before_the_next_line() -> None:
     assert compute_audio_status(1000, artifact, room_ms=2500) == SegmentAudioStatus.READY
 
 
-def test_dub_longer_than_its_room_plus_tolerance_is_still_a_mismatch() -> None:
+def test_dub_longer_than_its_room_plus_tolerance_is_stretched_then_a_mismatch() -> None:
     artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=3200)
+    assert compute_audio_status(1000, artifact, room_ms=2500) == SegmentAudioStatus.STRETCHED
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=4000)
     assert compute_audio_status(1000, artifact, room_ms=2500) == SegmentAudioStatus.MISMATCH
 
 

@@ -11,6 +11,7 @@ from dubforge_contracts.models import (
     MediaRead,
     Segment,
     SegmentReviewStatus,
+    TranslationSource,
     compute_audio_status,
     segment_room_ms,
 )
@@ -71,6 +72,7 @@ def segment_to_contract(
         speaker_label=segment.speaker_label,
         text=segment.text,
         translated_text=segment.translated_text,
+        translation_source=TranslationSource(segment.translation_source),
         review_status=SegmentReviewStatus(segment.review_status),
         artifact=artifact_contract,
         audio_status=compute_audio_status(segment.duration_ms, artifact_contract, room_ms),
