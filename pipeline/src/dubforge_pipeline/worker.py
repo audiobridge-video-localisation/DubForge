@@ -488,7 +488,7 @@ def process_export_job(
 
             segment_audio: list[tuple[int, str]] = []
             for index, (clip, clip_path) in enumerate(zip(timeline.clips, clip_paths, strict=True)):
-                if clip.tempo > 1.0:
+                if clip.tempo != 1.0:
                     stretched_path = str(Path(tmp_dir) / f"segment_{index}_tempo.wav")
                     apply_tempo(clip_path, stretched_path, clip.tempo)
                     clip_path = stretched_path

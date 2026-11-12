@@ -9,6 +9,14 @@ from dubforge_contracts.models import MAX_VIDEO_SLOWDOWN
 # Never speed speech up by more than this. Past it the video behind the line is slowed
 # instead (up to MAX_VIDEO_SLOWDOWN), and past that its last frame is held.
 MAX_ATEMPO = 1.25
+# Up to this much faster, a voice sounds natural: only the audio changes and the video is
+# left alone. Past it, speech and picture share the change (see _fit_window).
+MAX_AUDIO_ONLY_TEMPO = 1.2
+# A dub that ends well before its line leaves the speaker's mouth moving in silence, so it
+# is slowed toward the line's length, but never below this (slower starts to drawl).
+MIN_TEMPO = 0.85
+# A dub filling at least this share of its line is left alone: the gap is not noticeable.
+UNDERRUN_TOLERANCE = 0.95
 # A trimmed clip shorter than this is treated as silence (mock voices are silent) and the
 # untrimmed clip is used as it is.
 MIN_TRIMMED_MS = 100
@@ -59,22 +67,30 @@ class Timeline:
         return any(piece.changes_video for piece in self.pieces)
 
 
-def _fit_window(audio_ms: int, window_ms: int) -> tuple[float, float, int]:
-    """(tempo, video slowdown, frozen ms) that make `audio_ms` of speech fit the window.
+def _fit_window(audio_ms: int, window_ms: int, speech_ms: int) -> tuple[float, float, int]:
+    """(tempo, video slowdown, frozen ms) that make `audio_ms` of dub fit the window.
 
-    Speech is sped up first (it is the cheapest change and keeps the video untouched),
-    then the video is slowed, and only what is still left is covered by holding a frame.
+    `window_ms` is all the time the line has (up to the next line); `speech_ms` is how
+    long the original speaker talked. A short dub is slowed a little toward `speech_ms`.
+    A long one is sped up alone while that still sounds natural; past that the change is
+    shared evenly between faster speech and slower video (each by the square root of
+    what is needed), so neither is pushed hard. Whatever both caps cannot cover is held
+    as a still frame.
     """
     if audio_ms <= window_ms:
+        if 0 < audio_ms < speech_ms * UNDERRUN_TOLERANCE:
+            return max(audio_ms / speech_ms, MIN_TEMPO), 1.0, 0
         return 1.0, 1.0, 0
     if window_ms <= 0:
         return MAX_ATEMPO, 1.0, math.ceil(audio_ms / MAX_ATEMPO)
-    if audio_ms <= window_ms * MAX_ATEMPO:
-        return audio_ms / window_ms, 1.0, 0
-    played_ms = audio_ms / MAX_ATEMPO
+    need = audio_ms / window_ms
+    if need <= MAX_AUDIO_ONLY_TEMPO:
+        return need, 1.0, 0
+    tempo = min(math.sqrt(need), MAX_ATEMPO)
+    played_ms = audio_ms / tempo
     slowdown = min(played_ms / window_ms, MAX_VIDEO_SLOWDOWN)
     freeze_ms = max(0, math.ceil(played_ms - window_ms * slowdown))
-    return MAX_ATEMPO, slowdown, freeze_ms
+    return tempo, slowdown, freeze_ms
 
 
 def plan_timeline(segments: list[tuple[int, int, int]], total_duration_ms: int) -> Timeline:
@@ -82,10 +98,10 @@ def plan_timeline(segments: list[tuple[int, int, int]], total_duration_ms: int) 
 
     `segments` holds (start_ms, end_ms, audio_duration_ms) in any order; `clips` comes
     back in the same order. Each line owns the video from its start to the next line's
-    start (the video's end for the last one). A clip longer than that window is sped up
-    to at most MAX_ATEMPO; if it still does not fit, the window's video is slowed by up
-    to MAX_VIDEO_SLOWDOWN, and any remainder holds the window's last frame. So the export
-    always fits; the price is a slightly longer video where a line ran long.
+    start (the video's end for the last one). A clip longer than that window is sped up,
+    the window's video is slowed, and any remainder holds the window's last frame (see
+    _fit_window). So the export always fits; the price is a slightly longer video where
+    a line ran long. A clip much shorter than its line is slowed slightly to fill it.
     """
     total_ms = max(total_duration_ms, 0)
     order = sorted(range(len(segments)), key=lambda i: segments[i][0])
@@ -103,11 +119,12 @@ def plan_timeline(segments: list[tuple[int, int, int]], total_duration_ms: int) 
         window_end_ms = starts[position + 1] if position + 1 < len(order) else total_ms
         window_ms = window_end_ms - window_start_ms
         _start_ms, end_ms, audio_ms = segments[index]
+        line_ms = max(min(end_ms, window_end_ms) - window_start_ms, 0)
 
-        tempo, slowdown, freeze_ms = _fit_window(audio_ms, window_ms)
+        tempo, slowdown, freeze_ms = _fit_window(audio_ms, window_ms, line_ms)
         piece = VideoPiece(window_start_ms, window_end_ms, slowdown, freeze_ms)
         played_ms = round(audio_ms / tempo)
-        speech_ms = round(max(min(end_ms, window_end_ms) - window_start_ms, 0) * slowdown)
+        speech_ms = round(line_ms * slowdown)
         clips[index] = ClipPlacement(
             start_ms=cursor_ms,
             tempo=tempo,

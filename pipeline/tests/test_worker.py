@@ -668,14 +668,16 @@ def test_process_export_job_speeds_up_overrunning_segment_and_places_next_later(
         worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
 
     assert calls[-1]["status"] == "completed"
-    assert len(tempo_calls) == 1
-    assert tempo_calls[0][0] == str(tmp_path / "artifacts" / "seg0.wav")
-    assert tempo_calls[0][2] == pytest.approx(1.2)
+    # seg0 is sped up to fit; seg1 (500ms for a 1000ms line) is slowed a little to fill it
+    assert [(path.rsplit("/", 1)[-1], tempo) for path, _out, tempo in tempo_calls] == [
+        ("seg0.wav", pytest.approx(1.2)),
+        ("seg1.wav", pytest.approx(0.85)),
+    ]
 
     placed, total_ms = build_calls[0]
     assert total_ms == 5000
     assert placed[0] == (0, tempo_calls[0][1])
-    assert placed[1] == (1000, str(tmp_path / "artifacts" / "seg1.wav"))
+    assert placed[1] == (1000, tempo_calls[1][1])
 
 
 def test_process_export_job_gives_a_long_line_the_time_it_needs(
@@ -947,7 +949,7 @@ def test_process_export_job_mp4_slows_the_video_for_a_line_speech_alone_cannot_f
         worker, "mux_mp4", lambda video, _wav, out, **_k: muxed.append(video) or out
     )
 
-    # 1500ms in a 1000ms room: 1.25x speech plus a 1.2x slower window
+    # 1500ms in a 1000ms room: speech and video each take about 1.22x
     segments = [
         _segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 1500),
         _segment_with_audio_duration(1000, 2000, "artifacts/seg1.wav", 500),
@@ -957,9 +959,9 @@ def test_process_export_job_mp4_slows_the_video_for_a_line_speech_alone_cannot_f
         worker.process_export_job(client, "http://api", str(tmp_path), message)
 
     assert calls[-1]["status"] == "completed"
-    assert rebuilt and rebuilt[0][0].slowdown == pytest.approx(1.2)
+    assert rebuilt and rebuilt[0][0].slowdown == pytest.approx(1.5**0.5)
     assert muxed[0].endswith("timeline_video.mp4")
-    assert totals == [5200]  # the dub track is as long as the re-timed video
+    assert totals == [5225]  # the dub track is as long as the re-timed video
 
 
 def test_process_export_job_plans_with_the_trimmed_clip_length(
