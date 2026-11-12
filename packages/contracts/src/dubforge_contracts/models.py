@@ -21,8 +21,9 @@ class SpeakerSegment(BaseModel):
 class AudioResult(BaseModel):
     audio_path: str
     actual_duration_ms: int
-    # How much faster than its natural pace the voice was asked to speak (1.0 = natural).
-    # None means this is not a real voice (the mock), so nothing can be learned from it.
+    # How much faster than its normal pace (TTS_RATE, if set) the voice was asked to speak
+    # to fit the line (1.0 = normal). None means this is not a real voice (the mock), so
+    # nothing can be learned from it.
     speech_rate: float | None = None
 
 
@@ -73,16 +74,19 @@ class SegmentAudioStatus(StrEnum):
 USABLE_AUDIO_STATUSES = frozenset({SegmentAudioStatus.READY, SegmentAudioStatus.STRETCHED})
 
 
-AUDIO_MISMATCH_ABS_TOLERANCE_MS = 300
-# 0.25 matches MAX_ATEMPO (1.25) in dubforge_pipeline.export_assembly: audio up to
-# 25% longer than its slot can be sped up to fit at export time.
-AUDIO_MISMATCH_REL_TOLERANCE = 0.25
+# The most a dubbed line is ever sped up past the voice's normal pace, counting every step:
+# the voice speaking faster when it is synthesised and the speed-up at export together.
+# Past this it sounds rushed, so a line that would need more is flagged for a person.
+MAX_SPEEDUP = 1.25
+# Audio shorter than this share of its slot is more likely a clipped or silent take than
+# a terse translation.
+MIN_AUDIO_SHARE = 0.25
 # The most the export slows the video behind a long line (setpts). Like a 1.25x speed-up,
 # 1.25x slower talking footage is hard to notice.
 MAX_VIDEO_SLOWDOWN = 1.25
 # Audio up to this many times its room fits with both: 1.25x faster speech over 1.25x
 # slower video. Longer than that is a mismatch a person has to look at.
-MAX_TIMELINE_STRETCH = (1 + AUDIO_MISMATCH_REL_TOLERANCE) * MAX_VIDEO_SLOWDOWN
+MAX_TIMELINE_STRETCH = MAX_SPEEDUP * MAX_VIDEO_SLOWDOWN
 
 
 class MediaRead(BaseModel):
@@ -135,6 +139,8 @@ class Artifact(BaseModel):
     audio_path: str | None = None
     duration_ms: int | None = None
     voice_profile: str | None = None
+    # How much the voice was already sped up for this take (see MAX_SPEEDUP).
+    speedup: float = 1.0
     error_message: str | None = None
     retry_count: int = 0
     created_at: datetime
@@ -153,6 +159,11 @@ def segment_room_ms(start_ms: int, duration_ms: int, next_start_ms: int | None) 
     return max(duration_ms, next_start_ms - start_ms)
 
 
+def remaining_speedup(already: float) -> float:
+    """How much more a take that was already sped up `already` times may be sped up."""
+    return max(MAX_SPEEDUP / max(already, 1.0), 1.0)
+
+
 def compute_audio_status(
     segment_duration_ms: int, artifact: Artifact | None, room_ms: int | None = None
 ) -> SegmentAudioStatus:
@@ -169,16 +180,21 @@ def compute_audio_status(
     if artifact.status == ArtifactStatus.OUTDATED:
         return SegmentAudioStatus.OUTDATED
 
-    # COMPLETED: only audio LONGER than its room beyond tolerance is a problem;
-    # shorter audio just leaves silence, which is fine. Longer audio the export can
-    # absorb by slowing the video is "stretched"; past that it is a mismatch.
+    # COMPLETED: only audio LONGER than export can speed up into its room is a problem;
+    # shorter audio just leaves silence, which is fine, unless so short it is likely
+    # broken. Longer audio the export can absorb by also slowing the video is
+    # "stretched"; past that it is a mismatch.
     if artifact.duration_ms is None:
         return SegmentAudioStatus.MISMATCH
+    if artifact.duration_ms <= 0:
+        return SegmentAudioStatus.FAILED
+    if artifact.duration_ms < MIN_AUDIO_SHARE * segment_duration_ms:
+        return SegmentAudioStatus.MISMATCH
     available_ms = max(room_ms or 0, segment_duration_ms)
-    tolerance_ms = max(AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * available_ms)
-    if artifact.duration_ms - available_ms <= tolerance_ms:
+    fits_ms = available_ms * remaining_speedup(artifact.speedup)
+    if artifact.duration_ms <= fits_ms:
         return SegmentAudioStatus.READY
-    if artifact.duration_ms <= available_ms * MAX_TIMELINE_STRETCH:
+    if artifact.duration_ms <= fits_ms * MAX_VIDEO_SLOWDOWN:
         return SegmentAudioStatus.STRETCHED
     return SegmentAudioStatus.MISMATCH
 
@@ -251,6 +267,7 @@ class ArtifactCallbackUpdate(BaseModel):
     audio_path: str | None = None
     duration_ms: int | None = None
     voice_profile: str | None = None
+    speedup: float | None = None
     error_message: str | None = None
     # Set when the worker shortened the wording to make the audio fit; the audio matches it.
     translated_text: str | None = None

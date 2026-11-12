@@ -25,11 +25,11 @@ from dubforge_contracts.models import (
     Segment,
     SpeakerSegment,
     TranscriptSegment,
+    remaining_speedup,
 )
-from dubforge_pipeline.audio import extract_audio, fit_audio_duration, wav_duration_ms
+from dubforge_pipeline.audio import extract_audio, wav_duration_ms
 from dubforge_pipeline.auto_shorten import CANDIDATES_TO_SEARCH, shorter_alternatives
 from dubforge_pipeline.background import separate_background, voice_path
-from dubforge_pipeline.dub_fit import is_too_long
 from dubforge_pipeline.export_assembly import (
     MIN_TRIMMED_MS,
     VideoPiece,
@@ -187,6 +187,7 @@ def _report_artifact(
     audio_path: str | None = None,
     duration_ms: int | None = None,
     voice_profile: str | None = None,
+    speedup: float | None = None,
     error_message: str | None = None,
     translated_text: str | None = None,
 ) -> None:
@@ -195,6 +196,7 @@ def _report_artifact(
         audio_path=audio_path,
         duration_ms=duration_ms,
         voice_profile=voice_profile,
+        speedup=speedup,
         error_message=error_message,
         translated_text=translated_text,
     )
@@ -260,6 +262,8 @@ class _Take:
     audio_path: str
     duration_ms: int
     text: str
+    # how much the voice sped it up (see MAX_SPEEDUP); export may only add what is left
+    speedup: float = 1.0
 
 
 def _trim_take(audio_path: str, duration_ms: int) -> tuple[str, int]:
@@ -297,15 +301,18 @@ def _synthesize_take(
             duration_ms,
             result.speech_rate,
         )
-    if message.target_duration_ms is not None:
-        try:
-            audio_path, duration_ms = fit_audio_duration(
-                audio_path, duration_ms, message.target_duration_ms
-            )
-        except RuntimeError:
-            # an unfitted take can still be reviewed (it just shows as a mismatch)
-            logger.warning("could not fit audio to its slot")
-    return _Take(audio_path=audio_path, duration_ms=duration_ms, text=text)
+    # Any speed-up still needed happens at export, within what is left of MAX_SPEEDUP.
+    return _Take(
+        audio_path=audio_path,
+        duration_ms=duration_ms,
+        text=text,
+        speedup=result.speech_rate or 1.0,
+    )
+
+
+def _fits(take: _Take, room_ms: int) -> bool:
+    """Whether export can speed the take into its room without touching the video."""
+    return take.duration_ms <= room_ms * remaining_speedup(take.speedup)
 
 
 def _discard(take: _Take) -> None:
@@ -336,7 +343,7 @@ def _try_shorter_wordings(
     ms_per_char = get_ms_per_char(storage_root, _voice_key(voice_profile))
     for wording in shorter_alternatives(candidates, take.text, room_ms, ms_per_char):
         attempt = _synthesize_take(wording, message, voice_profile, storage_root)
-        if not is_too_long(attempt.duration_ms, room_ms):
+        if _fits(attempt, room_ms):
             _discard(best)
             return attempt
         if attempt.duration_ms < best.duration_ms:
@@ -367,7 +374,7 @@ def process_artifact(
             message.may_rewrite
             and message.source_text
             and message.target_duration_ms is not None
-            and is_too_long(take.duration_ms, message.target_duration_ms)
+            and not _fits(take, message.target_duration_ms)
         ):
             take = _try_shorter_wordings(take, message, voice_profile, storage_root)
             if take.text != message.text:
@@ -392,6 +399,7 @@ def process_artifact(
         audio_path=relative_audio_path,
         duration_ms=take.duration_ms,
         voice_profile=voice_profile,
+        speedup=take.speedup,
         translated_text=take.text if take.text != message.text else None,
     )
 
@@ -483,7 +491,7 @@ def process_export_job(
         video_path = str(Path(storage_root) / message.media_storage_path)
         total_duration_ms = probe_duration_ms(video_path)
 
-        sources: list[tuple[str, int | None]] = []
+        sources: list[tuple[str, int | None, float]] = []
         for segment in segments:
             if segment.artifact is None or segment.artifact.audio_path is None:
                 raise RuntimeError(f"segment {segment.id} has no usable audio artifact")
@@ -492,17 +500,17 @@ def process_export_job(
                 raise RuntimeError(
                     f"audio file missing on disk for segment {segment.id}: {abs_path}"
                 )
-            sources.append((abs_path, segment.artifact.duration_ms))
+            sources.append((abs_path, segment.artifact.duration_ms, segment.artifact.speedup))
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             clip_paths: list[str] = []
-            timings: list[tuple[int, int, int]] = []
-            for index, (segment, (source, recorded_ms)) in enumerate(
+            timings: list[tuple[int, int, int, float]] = []
+            for index, (segment, (source, recorded_ms, speedup)) in enumerate(
                 zip(segments, sources, strict=True)
             ):
                 clip_path, clip_ms = _trimmed_clip(source, recorded_ms, tmp_dir, index)
                 clip_paths.append(clip_path)
-                timings.append((segment.start_ms, segment.end_ms, clip_ms))
+                timings.append((segment.start_ms, segment.end_ms, clip_ms, speedup))
 
             # One timeline drives the MP3, the MP4's picture and its subtitles, so they
             # always agree with each other.

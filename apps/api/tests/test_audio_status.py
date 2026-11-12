@@ -91,13 +91,35 @@ async def test_completed_much_shorter_than_slot_is_ready(client: AsyncClient) ->
     artifact_id = (await client.post(f"/segments/{segment['id']}/regenerate")).json()["id"]
     await client.patch(
         f"/internal/artifacts/{artifact_id}",
-        json={"status": "completed", "audio_path": "/tmp/dub.wav", "duration_ms": 400},
+        json={"status": "completed", "audio_path": "/tmp/dub.wav", "duration_ms": 600},
     )
 
     detail = (await client.get(f"/projects/{segment['_project_id']}")).json()
     media = detail["media"][0]
     assert media["segments"][0]["audio_status"] == "ready"
     assert media["usable_audio_count"] == 1
+
+
+async def test_speed_up_reported_by_the_worker_is_stored_and_counts_against_the_cap(
+    client: AsyncClient,
+) -> None:
+    segment = await _seed_segment(client, duration_ms=1000)
+    artifact_id = (await client.post(f"/segments/{segment['id']}/regenerate")).json()["id"]
+    response = await client.patch(
+        f"/internal/artifacts/{artifact_id}",
+        json={
+            "status": "completed",
+            "audio_path": "/tmp/dub.wav",
+            "duration_ms": 1100,
+            "speedup": 1.25,
+        },
+    )
+    assert response.json()["speedup"] == 1.25
+
+    detail = (await client.get(f"/projects/{segment['_project_id']}")).json()
+    # 1100 ms would be ready at normal pace, but the voice already used the whole 1.25x,
+    # so only slowing the video can make room
+    assert detail["media"][0]["segments"][0]["audio_status"] == "stretched"
 
 
 async def test_completed_far_off_duration_is_mismatch(client: AsyncClient) -> None:

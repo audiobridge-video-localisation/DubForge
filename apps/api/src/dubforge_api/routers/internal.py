@@ -123,6 +123,8 @@ async def update_artifact(
         artifact.duration_ms = payload.duration_ms
     if payload.voice_profile is not None:
         artifact.voice_profile = payload.voice_profile
+    if payload.speedup is not None:
+        artifact.speedup = payload.speedup
     if payload.error_message is not None:
         artifact.error_message = payload.error_message[-2000:]
     if payload.translated_text is not None:

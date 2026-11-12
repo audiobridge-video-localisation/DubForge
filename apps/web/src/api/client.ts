@@ -48,6 +48,7 @@ export interface Artifact {
   audio_path: string | null;
   duration_ms: number | null;
   voice_profile: string | null;
+  speedup: number;
   error_message: string | null;
   retry_count: number;
   created_at: string;

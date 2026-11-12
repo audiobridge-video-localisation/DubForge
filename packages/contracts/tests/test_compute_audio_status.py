@@ -11,8 +11,12 @@ from dubforge_contracts.models import (
 NOW = datetime.now(UTC)
 
 
-def _artifact(status: ArtifactStatus, duration_ms: int | None = None) -> Artifact:
-    return Artifact(status=status, duration_ms=duration_ms, created_at=NOW, updated_at=NOW)
+def _artifact(
+    status: ArtifactStatus, duration_ms: int | None = None, speedup: float = 1.0
+) -> Artifact:
+    return Artifact(
+        status=status, duration_ms=duration_ms, speedup=speedup, created_at=NOW, updated_at=NOW
+    )
 
 
 def test_no_artifact_is_no_audio() -> None:
@@ -45,20 +49,14 @@ def test_completed_with_missing_duration_is_mismatch() -> None:
     assert compute_audio_status(1000, artifact) == SegmentAudioStatus.MISMATCH
 
 
-def test_completed_within_tolerance_is_ready() -> None:
-    # 1000ms expected, tolerance is max(300, 150) = 300ms.
+def test_completed_within_what_export_can_speed_up_is_ready() -> None:
     artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=1250)
     assert compute_audio_status(1000, artifact) == SegmentAudioStatus.READY
 
 
-def test_completed_exactly_at_abs_tolerance_is_ready() -> None:
-    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=1300)
-    assert compute_audio_status(1000, artifact) == SegmentAudioStatus.READY
-
-
-def test_completed_just_over_abs_tolerance_is_stretched() -> None:
-    # past the tolerance, but the export can slow the video to make room
-    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=1301)
+def test_completed_just_over_what_speech_alone_can_fit_is_stretched() -> None:
+    # past what faster speech covers, but the export can slow the video to make room
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=1251)
     assert compute_audio_status(1000, artifact) == SegmentAudioStatus.STRETCHED
 
 
@@ -74,19 +72,39 @@ def test_completed_past_what_the_export_can_absorb_is_mismatch() -> None:
     )
 
 
-def test_completed_much_shorter_than_slot_is_ready() -> None:
-    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=200)
+def test_short_line_gets_no_fixed_floor_export_cannot_honour() -> None:
+    # 700 ms in a 400 ms slot needs 1.75x; export stops at 1.25x.
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=700)
+    assert compute_audio_status(400, artifact) == SegmentAudioStatus.MISMATCH
+
+
+def test_speed_up_already_spent_by_the_voice_is_not_counted_twice() -> None:
+    # the voice used all of the 1.25x, so only the slower video is left for export
+    sped_up = _artifact(ArtifactStatus.COMPLETED, duration_ms=1100, speedup=1.25)
+    assert compute_audio_status(1000, sped_up) == SegmentAudioStatus.STRETCHED
+    too_long = _artifact(ArtifactStatus.COMPLETED, duration_ms=1251, speedup=1.25)
+    assert compute_audio_status(1000, too_long) == SegmentAudioStatus.MISMATCH
+    fits = _artifact(ArtifactStatus.COMPLETED, duration_ms=1000, speedup=1.25)
+    assert compute_audio_status(1000, fits) == SegmentAudioStatus.READY
+
+
+def test_completed_shorter_than_slot_is_ready() -> None:
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=250)
     assert compute_audio_status(1000, artifact) == SegmentAudioStatus.READY
 
 
-def test_completed_zero_length_is_ready() -> None:
-    # Shorter audio is never a mismatch, even degenerate durations.
+def test_completed_under_a_quarter_of_the_slot_is_mismatch() -> None:
+    # more likely a clipped or silent take than a terse translation
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=249)
+    assert compute_audio_status(1000, artifact) == SegmentAudioStatus.MISMATCH
+
+
+def test_completed_zero_length_is_failed() -> None:
     artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=0)
-    assert compute_audio_status(1000, artifact) == SegmentAudioStatus.READY
+    assert compute_audio_status(1000, artifact) == SegmentAudioStatus.FAILED
 
 
 def test_completed_just_under_rel_tolerance_is_ready_for_long_segment() -> None:
-    # 10000ms expected, tolerance is max(300, 2500) = 2500ms.
     artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=12500)
     assert compute_audio_status(10000, artifact) == SegmentAudioStatus.READY
 
@@ -98,8 +116,8 @@ def test_completed_just_over_rel_tolerance_is_stretched_for_long_segment() -> No
     assert compute_audio_status(10000, artifact) == SegmentAudioStatus.MISMATCH
 
 
-def test_completed_much_shorter_than_long_segment_is_ready() -> None:
-    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=2000)
+def test_completed_shorter_than_long_segment_is_ready() -> None:
+    artifact = _artifact(ArtifactStatus.COMPLETED, duration_ms=3000)
     assert compute_audio_status(10000, artifact) == SegmentAudioStatus.READY
 
 

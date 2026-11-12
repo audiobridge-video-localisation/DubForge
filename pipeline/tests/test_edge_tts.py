@@ -56,6 +56,11 @@ def _reset_fake_communicate() -> None:
     FakeCommunicate.rates = []
 
 
+@pytest.fixture(autouse=True)
+def _clear_tts_rate_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TTS_RATE", raising=False)
+
+
 @pytest.fixture
 def mock_edge_tts(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_module = types.ModuleType("edge_tts")
@@ -102,9 +107,21 @@ def test_synthesize_speaks_faster_when_the_take_is_too_long(
     provider = EdgeTTSProvider(output_dir=str(tmp_path))
     result = provider.synthesize("Hello there.", "hi", target_duration_ms=500)
 
-    assert FakeCommunicate.rates == ["+0%", "+30%"]  # capped at a natural speed-up
-    assert result.speech_rate == pytest.approx(1.3)
-    assert result.actual_duration_ms < 900  # about 1000 / 1.3
+    assert FakeCommunicate.rates == ["+0%", "+25%"]  # capped at MAX_SPEEDUP
+    assert result.speech_rate == pytest.approx(1.25)
+    assert result.actual_duration_ms < 900  # about 1000 / 1.25
+
+
+def test_synthesize_starts_at_tts_rate_and_speeds_up_on_top_of_it(
+    tmp_path: Path, mock_edge_tts: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TTS_RATE", "+20%")
+    provider = EdgeTTSProvider(output_dir=str(tmp_path))
+    result = provider.synthesize("Hello there.", "hi", target_duration_ms=500)
+
+    # 1.2x is the voice's normal pace; the speed-up for the long line multiplies it
+    assert FakeCommunicate.rates == ["+20%", "+50%"]
+    assert result.speech_rate == pytest.approx(1.25)  # measured from TTS_RATE, not natural
 
 
 def test_synthesize_empty_text_does_not_raise(tmp_path: Path, mock_edge_tts: None) -> None:
@@ -121,6 +138,41 @@ def test_synthesize_unsupported_language_raises_value_error(
     with pytest.raises(ValueError, match="fr"):
         provider.synthesize("Hello.", "fr")
     assert FakeCommunicate.save_calls == 0
+
+
+def test_rate_defaults_to_unchanged_speed(tmp_path: Path, mock_edge_tts: None) -> None:
+    EdgeTTSProvider(output_dir=str(tmp_path)).synthesize("Hello there.", "hi")
+
+    assert FakeCommunicate.rates[-1] == "+0%"
+
+
+@pytest.mark.parametrize("rate", ["+30%", "-10%", "+0%"])
+def test_rate_from_env_is_passed_to_communicate(
+    tmp_path: Path, mock_edge_tts: None, monkeypatch: pytest.MonkeyPatch, rate: str
+) -> None:
+    monkeypatch.setenv("TTS_RATE", rate)
+
+    EdgeTTSProvider(output_dir=str(tmp_path)).synthesize("Hello there.", "hi")
+
+    assert FakeCommunicate.rates[-1] == rate
+
+
+def test_rate_argument_overrides_env(
+    tmp_path: Path, mock_edge_tts: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TTS_RATE", "+30%")
+
+    EdgeTTSProvider(output_dir=str(tmp_path), rate="+10%").synthesize("Hello there.", "hi")
+
+    assert FakeCommunicate.rates[-1] == "+10%"
+
+
+@pytest.mark.parametrize("rate", ["30%", "+30", "fast", "+3.5%", "+%", "++30%", " +30%", "+30% "])
+def test_invalid_rate_env_is_rejected(monkeypatch: pytest.MonkeyPatch, rate: str) -> None:
+    monkeypatch.setenv("TTS_RATE", rate)
+
+    with pytest.raises(ValueError, match="TTS_RATE"):
+        EdgeTTSProvider()
 
 
 def test_synthesize_network_failure_raises_runtime_error(

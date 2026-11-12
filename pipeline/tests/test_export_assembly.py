@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from dubforge_contracts.models import MAX_VIDEO_SLOWDOWN
+from dubforge_contracts.models import MAX_SPEEDUP, MAX_VIDEO_SLOWDOWN
 from dubforge_pipeline.export_assembly import (
-    MAX_ATEMPO,
     MIN_TEMPO,
     VideoPiece,
     apply_tempo,
@@ -35,7 +34,7 @@ def test_plan_timeline_without_lines_is_the_whole_video() -> None:
 
 
 def test_plan_timeline_fitting_audio_changes_nothing() -> None:
-    timeline = plan_timeline([(500, 1000, 900), (2000, 3000, 1000)], 5000)
+    timeline = plan_timeline([(500, 1000, 900, 1.0), (2000, 3000, 1000, 1.0)], 5000)
     assert [(c.start_ms, c.tempo) for c in timeline.clips] == [(500, 1.0), (2000, 1.0)]
     assert timeline.duration_ms == 5000
     assert not timeline.changes_video
@@ -43,7 +42,7 @@ def test_plan_timeline_fitting_audio_changes_nothing() -> None:
 
 def test_plan_timeline_speeds_speech_up_first() -> None:
     # 1200ms in a 1000ms window: 1.2x faster speech, video untouched
-    timeline = plan_timeline([(0, 1000, 1200), (1000, 2000, 500)], 3000)
+    timeline = plan_timeline([(0, 1000, 1200, 1.0), (1000, 2000, 500, 1.0)], 3000)
     assert timeline.clips[0].tempo == pytest.approx(1.2)
     assert timeline.clips[1].start_ms == 1000
     assert not timeline.changes_video
@@ -52,7 +51,7 @@ def test_plan_timeline_speeds_speech_up_first() -> None:
 def test_plan_timeline_shares_a_bigger_overrun_between_speech_and_video() -> None:
     # 1500ms in a 1000ms window: past what sounds natural from speech alone, so speech
     # and video each take the square root of 1.5 (about 1.22x) instead of one doing it all
-    timeline = plan_timeline([(0, 1000, 1500), (1000, 2000, 1000)], 3000)
+    timeline = plan_timeline([(0, 1000, 1500, 1.0), (1000, 2000, 1000, 1.0)], 3000)
     first = timeline.clips[0]
     assert first.tempo == pytest.approx(math.sqrt(1.5))
     assert timeline.pieces[0].slowdown == pytest.approx(math.sqrt(1.5))
@@ -65,25 +64,25 @@ def test_plan_timeline_shares_a_bigger_overrun_between_speech_and_video() -> Non
 
 
 def test_plan_timeline_slightly_long_dub_only_speeds_the_voice() -> None:
-    timeline = plan_timeline([(0, 1000, 1150), (1000, 2000, 1000)], 3000)
+    timeline = plan_timeline([(0, 1000, 1150, 1.0), (1000, 2000, 1000, 1.0)], 3000)
     assert timeline.clips[0].tempo == pytest.approx(1.15)
     assert not timeline.changes_video
 
 
 def test_plan_timeline_slows_a_short_dub_toward_its_line() -> None:
     # 700ms of dub for 1000ms of speech: slowed, but not below MIN_TEMPO
-    timeline = plan_timeline([(0, 1000, 900), (2000, 3000, 500)], 4000)
+    timeline = plan_timeline([(0, 1000, 900, 1.0), (2000, 3000, 500, 1.0)], 4000)
     assert timeline.clips[0].tempo == pytest.approx(0.9)
     assert timeline.clips[1].tempo == MIN_TEMPO
     # nearly full lines are left alone
-    assert plan_timeline([(0, 1000, 960)], 2000).clips[0].tempo == 1.0
+    assert plan_timeline([(0, 1000, 960, 1.0)], 2000).clips[0].tempo == 1.0
     assert not timeline.changes_video
 
 
 def test_plan_timeline_holds_a_frame_for_whatever_is_left() -> None:
     # 3000ms in a 1000ms window: 1.25x speech = 2400ms; 1.25x slower video = 1250ms;
     # the last frame is held for the other 1150ms
-    timeline = plan_timeline([(0, 1000, 3000), (1000, 2000, 500)], 3000)
+    timeline = plan_timeline([(0, 1000, 3000, 1.0), (1000, 2000, 500, 1.0)], 3000)
     piece = timeline.pieces[0]
     assert piece.slowdown == MAX_VIDEO_SLOWDOWN
     assert piece.freeze_ms == 1150
@@ -92,34 +91,53 @@ def test_plan_timeline_holds_a_frame_for_whatever_is_left() -> None:
 
 
 def test_plan_timeline_never_overlaps_or_cuts_clips() -> None:
-    lines = [(0, 900, 4000), (1000, 1800, 2600), (2000, 2500, 300), (2600, 4000, 5000)]
+    lines = [
+        (0, 900, 4000, 1.0),
+        (1000, 1800, 2600, 1.1),
+        (2000, 2500, 300, 1.0),
+        (2600, 4000, 5000, 1.2),
+    ]
     timeline = plan_timeline(lines, 4500)
     ordered = sorted(timeline.clips, key=lambda c: c.start_ms)
     for earlier, later in zip(ordered, ordered[1:], strict=False):
         assert earlier.end_ms <= later.start_ms + 1
     assert ordered[-1].end_ms <= timeline.duration_ms + 1
-    for clip, (_start, _end, audio_ms) in zip(timeline.clips, lines, strict=True):
+    for clip, (_start, _end, audio_ms, speedup) in zip(timeline.clips, lines, strict=True):
         # audio only changes speed within the caps, never trimmed
         assert clip.end_ms - clip.start_ms == round(audio_ms / clip.tempo)
-        assert MIN_TEMPO <= clip.tempo <= MAX_ATEMPO
+        assert MIN_TEMPO <= clip.tempo
+        assert clip.tempo * speedup <= MAX_SPEEDUP + 1e-9
 
 
 def test_plan_timeline_last_line_past_the_video_end_freezes_the_end() -> None:
-    timeline = plan_timeline([(0, 1000, 500), (4000, 4800, 2000)], 5000)
+    timeline = plan_timeline([(0, 1000, 500, 1.0), (4000, 4800, 2000, 1.0)], 5000)
     last = timeline.pieces[-1]
     assert last.source_end_ms == 5000
     assert timeline.duration_ms >= timeline.clips[1].end_ms
     assert last.freeze_ms > 0 or last.slowdown > 1
 
 
+def test_plan_timeline_only_speeds_up_what_the_voice_left_of_the_cap() -> None:
+    # the voice already spoke 1.25x faster, so the video makes all the room
+    timeline = plan_timeline([(0, 1000, 1200, MAX_SPEEDUP), (1000, 2000, 500, 1.0)], 3000)
+    assert timeline.clips[0].tempo == 1.0
+    assert timeline.pieces[0].slowdown == pytest.approx(1.2)
+    # 1.1x by the voice leaves about 1.136x: 1.15x is no longer speech alone
+    timeline = plan_timeline([(0, 1000, 1150, 1.1), (1000, 2000, 500, 1.0)], 3000)
+    assert timeline.clips[0].tempo * 1.1 <= MAX_SPEEDUP + 1e-9
+    assert timeline.changes_video
+
+
 def test_plan_timeline_keeps_input_order_for_unsorted_lines() -> None:
-    timeline = plan_timeline([(2000, 3000, 500), (0, 1000, 1200), (1000, 2000, 500)], 5000)
+    timeline = plan_timeline(
+        [(2000, 3000, 500, 1.0), (0, 1000, 1200, 1.0), (1000, 2000, 500, 1.0)], 5000
+    )
     assert [c.start_ms for c in timeline.clips] == [2000, 0, 1000]
     assert timeline.clips[1].tempo == pytest.approx(1.2)
 
 
 def test_plan_timeline_subtitles_last_as_long_as_the_speech_or_the_clip() -> None:
-    timeline = plan_timeline([(0, 800, 400), (1000, 2000, 2400)], 3000)
+    timeline = plan_timeline([(0, 800, 400, 1.0), (1000, 2000, 2400, 1.0)], 3000)
     short, long = timeline.clips
     assert short.tempo == MIN_TEMPO
     assert short.subtitle_end_ms == 800  # the clip ends early; the line still reads on

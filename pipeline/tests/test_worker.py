@@ -762,10 +762,13 @@ def test_process_artifact_learns_the_voice_speed_from_real_takes(
     monkeypatch.setattr(worker, "_get_tts_provider", lambda: _RealVoice())
 
     message = ArtifactQueueMessage(artifact_id=uuid.uuid4(), segment_id=uuid.uuid4(), text="x" * 10)
-    with _client_recording([]) as client:
+    calls: list[Any] = []
+    with _client_recording(calls) as client:
         worker.process_artifact(client, "http://api", str(storage_root), message)
 
     assert get_ms_per_char(str(storage_root), worker._voice_key("hi")) == pytest.approx(62.5)
+    # export may only speed it up by what is left of MAX_SPEEDUP
+    assert calls[-1]["speedup"] == pytest.approx(1.25)
 
 
 def test_process_artifact_does_not_learn_from_the_mock_voice(

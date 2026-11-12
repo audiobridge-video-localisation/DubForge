@@ -1,6 +1,6 @@
 """Shorter wordings for a line whose dub still does not fit its room.
 
-Speeding a voice up has a natural limit (dub_fit.MAX_NATURAL_RATE), so a line that is still
+Speeding a voice up has a natural limit (MAX_SPEEDUP in the contracts), so a line that is still
 too long is fixed the way a person would fix it: with fewer words. The translator already
 produced alternatives when it translated the line; the first few that are shorter and likely
 to fit are tried, and the take that fits (or overshoots least) wins.

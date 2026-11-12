@@ -101,6 +101,7 @@ class Artifact(Base):
     audio_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(nullable=True)
     voice_profile: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    speedup: Mapped[float] = mapped_column(nullable=False, default=1.0, server_default="1")
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     retry_count: Mapped[int] = mapped_column(nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(

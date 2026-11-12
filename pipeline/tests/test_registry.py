@@ -8,6 +8,7 @@ from dubforge_pipeline.providers.mock import (
     MockTTSProvider,
 )
 from dubforge_pipeline.providers.nllb import NLLBTranslationProvider
+from dubforge_pipeline.providers.nllb_ct2 import NLLBCT2TranslationProvider
 from dubforge_pipeline.providers.registry import (
     get_stt_provider,
     get_translation_provider,
@@ -88,6 +89,12 @@ def test_translation_provider_nllb(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TRANSLATION_PROVIDER", "nllb")
     provider = get_translation_provider()
     assert isinstance(provider, NLLBTranslationProvider)
+
+
+def test_translation_provider_nllb_ct2(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRANSLATION_PROVIDER", "nllb-ct2")
+    provider = get_translation_provider()
+    assert isinstance(provider, NLLBCT2TranslationProvider)
 
 
 def test_translation_provider_name_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
