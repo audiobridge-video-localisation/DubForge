@@ -1,0 +1,106 @@
+.stmt {
+  position: relative;
+  height: 260vh;
+}
+.stmt-pin {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  padding: 0 24px;
+}
+/* the stripes frame the text instead of sitting behind it: a mask clears the area
+   around the sentence, the rings are low-contrast and drift only a little with scroll
+   (--p, set on .stmt), and the peach glow slowly rises like a dawn */
+.stmt .arches {
+  --travel: calc(var(--p, 0) * 240px);
+  --rise: calc(var(--p, 0) * 26%);
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      120% 90% at 50% calc(126% - var(--rise)),
+      #fbe3d3 0%,
+      #f4b9a0 28%,
+      transparent 60%
+    ),
+    linear-gradient(180deg, #c8e4f0 0%, #e6f1f6 46%, #f4c7b0 100%);
+}
+.stmt .arches::before,
+.stmt .arches::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: radial-gradient(
+    ellipse 62% 44% at 50% 47%,
+    transparent 52%,
+    #000 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 62% 44% at 50% 47%,
+    transparent 52%,
+    #000 100%
+  );
+}
+.stmt .arches::before {
+  background: repeating-radial-gradient(
+    ellipse at 50% 120%,
+    rgba(255, 255, 255, 0.16) var(--travel),
+    rgba(255, 255, 255, 0.16) calc(var(--travel) + 56px),
+    transparent calc(var(--travel) + 56px),
+    transparent calc(var(--travel) + 120px)
+  );
+}
+.stmt .arches::after {
+  background: repeating-radial-gradient(
+    ellipse at 50% 120%,
+    rgba(255, 255, 255, 0.3) var(--travel),
+    rgba(255, 255, 255, 0.3) calc(var(--travel) + 1.5px),
+    transparent calc(var(--travel) + 1.5px),
+    transparent calc(var(--travel) + 60px)
+  );
+}
+.stmt .plabel,
+.stmt-text {
+  position: relative;
+  z-index: 1;
+}
+.stmt-text {
+  max-width: 920px;
+  margin: 0;
+  text-align: center;
+  font-family: var(--display);
+  font-size: clamp(30px, 4.6vw, 58px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+  font-variation-settings:
+    "SOFT" 100,
+    "WONK" 1;
+}
+.stmt .w {
+  opacity: clamp(0.24, calc(0.24 + (var(--p, 0) - var(--s)) * 9), 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .stmt .arches {
+    --travel: 0px;
+    --rise: 0%;
+  }
+  .stmt {
+    height: auto;
+  }
+  .stmt-pin {
+    position: relative;
+    height: auto;
+    padding: 140px 24px;
+  }
+  .stmt .w {
+    opacity: 1;
+  }
+}

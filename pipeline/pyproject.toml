@@ -5,9 +5,35 @@ description = "DubForge media and AI processing pipeline"
 requires-python = ">=3.12"
 dependencies = [
   "dubforge-contracts",
-  "ffmpeg-python>=0.2.0",
+  "faster-whisper>=1.1",
+  "av>=11,<19",
   "httpx>=0.28",
   "redis>=5.2",
+]
+
+[project.optional-dependencies]
+nllb = [
+  "transformers>=5.19",
+  "torch>=2.14",
+  "sentencepiece>=0.2.2",
+]
+tts-edge = [
+  "edge-tts>=7.3.1",
+]
+tts-mms = [
+  "transformers>=5.19",
+  "torch>=2.14",
+  "scipy>=1.18",
+]
+# Keeps a video's music and room sound under the dub (voice/background separation).
+# Not on Intel Macs: demucs pins an old torch there that clashes with the nllb extra.
+background = [
+  "demucs>=4.1; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+]
+nllb-ct2 = [
+  "ctranslate2>=4.4",
+  "transformers>=5.19",
+  "sentencepiece>=0.2.2",
 ]
 
 [project.scripts]
