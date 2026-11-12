@@ -25,6 +25,11 @@ tts-mms = [
   "torch>=2.14",
   "scipy>=1.18",
 ]
+# Keeps a video's music and room sound under the dub (voice/background separation).
+# Not on Intel Macs: demucs pins an old torch there that clashes with the nllb extra.
+background = [
+  "demucs>=4.1; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+]
 
 [project.scripts]
 dubforge-worker = "dubforge_pipeline.worker:run"

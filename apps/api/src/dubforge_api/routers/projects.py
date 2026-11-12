@@ -16,7 +16,12 @@ from dubforge_api.schemas import (
     rooms_by_segment,
     segment_to_contract,
 )
-from dubforge_contracts.models import JobRead, MediaRead, SegmentAudioStatus, SegmentReviewStatus
+from dubforge_contracts.models import (
+    USABLE_AUDIO_STATUSES,
+    JobRead,
+    MediaRead,
+    SegmentReviewStatus,
+)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -81,7 +86,7 @@ async def get_project(
                 ),
                 total_count=len(item.segments),
                 usable_audio_count=sum(
-                    1 for s in segments if s.audio_status == SegmentAudioStatus.READY
+                    1 for s in segments if s.audio_status in USABLE_AUDIO_STATUSES
                 ),
             )
         )

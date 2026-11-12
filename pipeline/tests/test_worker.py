@@ -401,6 +401,22 @@ def test_process_artifact_persists_audio_into_storage_dir(
     assert calls[-1]["duration_ms"] == 1500
 
 
+@pytest.fixture(autouse=True)
+def _no_background(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exports here carry the dub alone unless a test gives them a background."""
+    monkeypatch.setattr(worker, "separate_background", lambda _video: None)
+
+
+@pytest.fixture(autouse=True)
+def _no_silence_trimming(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fake audio files in these tests are not real WAVs; exports use them as they are."""
+
+    def _cannot_trim(*_a: object, **_k: object) -> str:
+        raise RuntimeError("not a real clip")
+
+    monkeypatch.setattr(worker, "trim_silence", _cannot_trim)
+
+
 def _segment_with_artifact(start_ms: int, audio_path: str | None) -> Segment:
     now = datetime.now(UTC)
     artifact = (
@@ -513,9 +529,14 @@ def test_process_export_job_mp4_dispatches_to_mux(
 
     mux_calls: list[Any] = []
 
-    def fake_mux(video: str, wav: str, out: str) -> str:
-        mux_calls.append((video, wav, out))
+    def fake_mux(video: str, wav: str, out: str, **kwargs: Any) -> str:
+        mux_calls.append((video, wav, out, kwargs))
         return out
+
+    def fail_rebuild(*_a: object, **_k: object) -> str:
+        raise AssertionError("a fitting dub must not re-encode the video")
+
+    monkeypatch.setattr(worker, "build_timeline_video", fail_rebuild)
 
     monkeypatch.setattr(worker, "mux_mp4", fake_mux)
 
@@ -533,6 +554,9 @@ def test_process_export_job_mp4_dispatches_to_mux(
     assert calls[-1]["status"] == "completed"
     assert calls[-1]["output_path"] == f"exports/{export_job_id}.mp4"
     assert len(mux_calls) == 1
+    video, _wav, _out, kwargs = mux_calls[0]
+    assert video == str(storage_root / "proj" / "video.mp4")  # the original, untouched
+    assert kwargs["subtitles_path"].endswith("dub.srt")
 
 
 def test_process_export_job_fails_when_segment_has_no_artifact(
@@ -650,17 +674,19 @@ def test_process_export_job_speeds_up_overrunning_segment_and_places_next_later(
         worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
 
     assert calls[-1]["status"] == "completed"
-    assert len(tempo_calls) == 1
-    assert tempo_calls[0][0] == str(tmp_path / "artifacts" / "seg0.wav")
-    assert tempo_calls[0][2] == pytest.approx(1.2)
+    # seg0 is sped up to fit; seg1 (500ms for a 1000ms line) is slowed a little to fill it
+    assert [(path.rsplit("/", 1)[-1], tempo) for path, _out, tempo in tempo_calls] == [
+        ("seg0.wav", pytest.approx(1.2)),
+        ("seg1.wav", pytest.approx(0.85)),
+    ]
 
     placed, total_ms = build_calls[0]
     assert total_ms == 5000
     assert placed[0] == (0, tempo_calls[0][1])
-    assert placed[1] == (1000, str(tmp_path / "artifacts" / "seg1.wav"))
+    assert placed[1] == (1000, tempo_calls[1][1])
 
 
-def test_process_export_job_pushes_next_segment_after_overrun_capped_at_max_tempo(
+def test_process_export_job_gives_a_long_line_the_time_it_needs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     calls: list[Any] = []
@@ -677,7 +703,8 @@ def test_process_export_job_pushes_next_segment_after_overrun_capped_at_max_temp
     monkeypatch.setattr(worker, "build_dub_audio_track", fake_build)
     monkeypatch.setattr(worker, "encode_mp3", lambda _wav, out: out)
 
-    # 3000ms in a 1000ms room: capped at 1.25x -> ends at 2400, so seg1 is pushed.
+    # 3000ms in a 1000ms room: 1.25x speech plays 2400ms; the export timeline makes the
+    # window that long (slower video, then a held frame), so seg1 starts at 2400.
     segments = [
         _segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 3000),
         _segment_with_audio_duration(1000, 2000, "artifacts/seg1.wav", 500),
@@ -760,3 +787,272 @@ def test_process_artifact_does_not_learn_from_the_mock_voice(
         worker.process_artifact(client, "http://api", str(storage_root), message)
 
     assert get_ms_per_char(str(storage_root), worker._voice_key("hi")) == DEFAULT_MS_PER_CHAR
+
+
+# --- shortening a line that still does not fit -------------------------------------------
+
+
+class _LengthVoice(TTSProvider):
+    """Says every character in 100 ms, never faster, and records what it was asked to say."""
+
+    def __init__(self, take_dir: Path) -> None:
+        self.take_dir = take_dir
+        self.said: list[str] = []
+
+    def synthesize(
+        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+    ) -> AudioResult:
+        import wave
+
+        self.said.append(text)
+        duration_ms = len(text) * 100
+        self.take_dir.mkdir(exist_ok=True)
+        path = self.take_dir / f"take{len(self.said)}.wav"
+        with wave.open(str(path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(1000)
+            wav_file.writeframes(b"\x00\x00" * duration_ms)
+        return AudioResult(audio_path=str(path), actual_duration_ms=duration_ms, speech_rate=1.0)
+
+
+class _Alternatives(MockTranslationProvider):
+    def __init__(self, candidates: list[str] | Exception) -> None:
+        self.candidates = candidates
+        self.asked = 0
+
+    def translate_candidates(
+        self, text: str, src_lang: str, tgt_lang: str, count: int = 1
+    ) -> list[str]:
+        self.asked += 1
+        if isinstance(self.candidates, Exception):
+            raise self.candidates
+        return self.candidates
+
+
+def _run_shortening(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    voice: _LengthVoice,
+    translator: _Alternatives,
+    text: str,
+    room_ms: int = 1000,
+    may_rewrite: bool = True,
+) -> list[Any]:
+    calls: list[Any] = []
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir(exist_ok=True)
+    monkeypatch.setattr(worker, "_get_tts_provider", lambda: voice)
+    monkeypatch.setattr(worker, "_get_translator", lambda: translator)
+    message = ArtifactQueueMessage(
+        artifact_id=uuid.uuid4(),
+        segment_id=uuid.uuid4(),
+        text=text,
+        target_duration_ms=room_ms,
+        source_text="the source line",
+        may_rewrite=may_rewrite,
+    )
+    with _client_recording(calls) as client:
+        worker.process_artifact(client, "http://api", str(storage_root), message)
+    return calls
+
+
+def test_a_line_that_is_too_long_is_shortened_automatically(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    voice = _LengthVoice(tmp_path / "takes")
+    translator = _Alternatives(["x" * 40, "y" * 12, "z" * 8])
+
+    calls = _run_shortening(monkeypatch, tmp_path, voice, translator, "x" * 40)
+
+    assert _status_calls(calls) == ["processing", "completed"]
+    assert voice.said == ["x" * 40, "y" * 12]  # the long wording, then the first that fits
+    assert calls[-1]["translated_text"] == "y" * 12
+    assert calls[-1]["duration_ms"] == 1200  # within the room (1000 ms + 300 ms)
+    assert list((tmp_path / "takes").iterdir()) == []  # rejected and persisted takes are gone
+
+
+def test_a_line_that_already_fits_is_left_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    voice = _LengthVoice(tmp_path / "takes")
+    translator = _Alternatives(["a" * 5])
+
+    calls = _run_shortening(monkeypatch, tmp_path, voice, translator, "x" * 10)
+
+    assert translator.asked == 0
+    assert voice.said == ["x" * 10]
+    assert "translated_text" not in calls[-1]
+
+
+def test_a_line_a_person_edited_is_never_rewritten(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    voice = _LengthVoice(tmp_path / "takes")
+    translator = _Alternatives(["y" * 12])
+
+    calls = _run_shortening(monkeypatch, tmp_path, voice, translator, "x" * 40, may_rewrite=False)
+
+    assert translator.asked == 0
+    assert voice.said == ["x" * 40]
+    assert calls[-1]["duration_ms"] == 4000 and "translated_text" not in calls[-1]
+
+
+def test_when_no_wording_fits_the_shortest_take_is_kept(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    voice = _LengthVoice(tmp_path / "takes")
+    translator = _Alternatives(["x" * 40, "y" * 30, "z" * 35])
+
+    calls = _run_shortening(monkeypatch, tmp_path, voice, translator, "x" * 40)
+
+    assert calls[-1]["translated_text"] == "y" * 30  # 3000 ms still too long, but the best
+    assert calls[-1]["duration_ms"] == 3000
+    assert list((tmp_path / "takes").iterdir()) == []
+
+
+def test_when_no_alternative_is_shorter_the_original_stands(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    voice = _LengthVoice(tmp_path / "takes")
+    translator = _Alternatives(["x" * 40, "w" * 38])  # not clearly shorter
+
+    calls = _run_shortening(monkeypatch, tmp_path, voice, translator, "x" * 40)
+
+    assert voice.said == ["x" * 40]
+    assert calls[-1]["duration_ms"] == 4000 and "translated_text" not in calls[-1]
+
+
+def test_a_failing_translator_does_not_fail_the_artifact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    voice = _LengthVoice(tmp_path / "takes")
+    translator = _Alternatives(RuntimeError("model unavailable"))
+
+    calls = _run_shortening(monkeypatch, tmp_path, voice, translator, "x" * 40)
+
+    assert _status_calls(calls) == ["processing", "completed"]
+    assert calls[-1]["duration_ms"] == 4000 and "translated_text" not in calls[-1]
+
+
+def test_process_export_job_mp4_slows_the_video_for_a_line_speech_alone_cannot_fit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[Any] = []
+    _prepare_export_storage(tmp_path, "seg0.wav", "seg1.wav")
+    monkeypatch.setattr(worker, "probe_duration_ms", lambda *_a, **_k: 5000)
+    monkeypatch.setattr(worker, "apply_tempo", lambda _in, out, _tempo: out)
+    totals: list[int] = []
+    monkeypatch.setattr(
+        worker, "build_dub_audio_track", lambda _s, total, out: totals.append(total) or out
+    )
+    rebuilt: list[Any] = []
+
+    def fake_rebuild(video: str, pieces: Any, _work: str, out: str) -> str:
+        rebuilt.append(pieces)
+        return out
+
+    monkeypatch.setattr(worker, "build_timeline_video", fake_rebuild)
+    muxed: list[str] = []
+    monkeypatch.setattr(
+        worker, "mux_mp4", lambda video, _wav, out, **_k: muxed.append(video) or out
+    )
+
+    # 1500ms in a 1000ms room: speech and video each take about 1.22x
+    segments = [
+        _segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 1500),
+        _segment_with_audio_duration(1000, 2000, "artifacts/seg1.wav", 500),
+    ]
+    message = _export_message().model_copy(update={"kind": ExportKind.MP4})
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(tmp_path), message)
+
+    assert calls[-1]["status"] == "completed"
+    assert rebuilt and rebuilt[0][0].slowdown == pytest.approx(1.5**0.5)
+    assert muxed[0].endswith("timeline_video.mp4")
+    assert totals == [5225]  # the dub track is as long as the re-timed video
+
+
+def test_process_export_job_plans_with_the_trimmed_clip_length(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[Any] = []
+    _prepare_export_storage(tmp_path, "seg0.wav")
+    # a 1000ms video: the only line's room ends there
+    monkeypatch.setattr(worker, "probe_duration_ms", lambda *_a, **_k: 1000)
+    monkeypatch.setattr(worker, "trim_silence", lambda _in, out: out)
+    monkeypatch.setattr(worker, "wav_duration_ms", lambda _path: 1000)
+    tempos: list[float] = []
+    monkeypatch.setattr(worker, "apply_tempo", lambda _in, out, tempo: tempos.append(tempo) or out)
+    placed: list[Any] = []
+    monkeypatch.setattr(
+        worker, "build_dub_audio_track", lambda segs, _t, out: placed.extend(segs) or out
+    )
+    monkeypatch.setattr(worker, "encode_mp3", lambda _wav, out: out)
+
+    # recorded at 1200ms (too long for the 1000ms room), but 200ms of it was silence
+    segments = [_segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 1200)]
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
+
+    assert calls[-1]["status"] == "completed"
+    assert tempos == []  # it fits once trimmed, so no speed-up
+    assert placed[0][1].endswith("segment_0_trim.wav")
+
+
+def test_process_export_job_lays_the_dub_over_the_video_background(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[Any] = []
+    _prepare_export_storage(tmp_path, "seg0.wav")
+    monkeypatch.setattr(worker, "probe_duration_ms", lambda *_a, **_k: 5000)
+    monkeypatch.setattr(worker, "build_dub_audio_track", lambda _s, _t, out: out)
+    monkeypatch.setattr(worker, "separate_background", lambda _video: "/media/bg.wav")
+    timed: list[Any] = []
+    monkeypatch.setattr(
+        worker,
+        "build_timeline_background",
+        lambda bg, pieces, out: timed.append((bg, pieces)) or out,
+    )
+    mixed: list[Any] = []
+    monkeypatch.setattr(
+        worker,
+        "mix_with_background",
+        lambda dub, bed, out, dub_gain_db=0.0: mixed.append((dub, bed, dub_gain_db)) or out,
+    )
+    encoded: list[str] = []
+    monkeypatch.setattr(worker, "encode_mp3", lambda wav, out: encoded.append(wav) or out)
+
+    segments = [_segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 1000)]
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
+
+    assert calls[-1]["status"] == "completed"
+    assert timed[0][0] == "/media/bg.wav"
+    assert mixed[0][0].endswith("dub_track.wav") and mixed[0][1].endswith("bed.wav")
+    assert mixed[0][2] == 0.0  # no separated voice to match: the dub keeps its level
+    assert encoded[0].endswith("soundtrack.wav")
+
+
+def test_process_export_job_keeps_the_dub_alone_when_mixing_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[Any] = []
+    _prepare_export_storage(tmp_path, "seg0.wav")
+    monkeypatch.setattr(worker, "probe_duration_ms", lambda *_a, **_k: 5000)
+    monkeypatch.setattr(worker, "build_dub_audio_track", lambda _s, _t, out: out)
+    monkeypatch.setattr(worker, "separate_background", lambda _video: "/media/bg.wav")
+
+    def _broken(*_a: object, **_k: object) -> str:
+        raise RuntimeError("ffmpeg failed")
+
+    monkeypatch.setattr(worker, "build_timeline_background", _broken)
+    encoded: list[str] = []
+    monkeypatch.setattr(worker, "encode_mp3", lambda wav, out: encoded.append(wav) or out)
+
+    segments = [_segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 1000)]
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
+
+    assert calls[-1]["status"] == "completed"
+    assert encoded[0].endswith("dub_track.wav")

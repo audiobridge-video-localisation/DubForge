@@ -39,7 +39,11 @@ export interface MediaPanelProps extends SegmentHandlers {
   onRetry: (jobId: string) => Promise<void>;
   onReadyForDubbing: (mediaId: string) => void;
   onRegenerateProblems: (mediaId: string, segmentIds: string[]) => void;
-  onExport: (mediaId: string, kind: ExportKind) => void;
+  onExport: (
+    mediaId: string,
+    kind: ExportKind,
+    acceptLongLines?: boolean,
+  ) => void;
 }
 
 function Meter({
@@ -120,9 +124,6 @@ export function MediaPanel({
   const needAudioIds = segments
     .filter((s) => s.audio_status === "no_audio")
     .map((s) => s.id);
-  const mismatches = segments.filter(
-    (s) => s.audio_status === "mismatch",
-  ).length;
   const allApproved = total_count > 0 && approved_count === total_count;
   const dubReady = allApproved && usable_audio_count === total_count;
   async function retry() {
@@ -303,17 +304,6 @@ export function MediaPanel({
               </button>
             </div>
           </div>
-          {mismatches > 0 && (
-            <p className="hint" role="status">
-              {mismatches} dubbed {mismatches === 1 ? "line is" : "lines are"}{" "}
-              too long to fit before the next line. A dub may run up to 0.3 s or
-              25% past the time it has (its own line plus the silence after it);
-              a shorter dub is fine. Regenerating already speeds the voice up a
-              little, but these lines need more than a natural speed-up. Shorten
-              the translation, or widen the line's start and end, then
-              regenerate it.
-            </p>
-          )}
           {batchRegenerateError && (
             <p className="inline-error" role="alert">
               {batchRegenerateError}

@@ -22,6 +22,7 @@ from dubforge_contracts.models import (
     Segment,
     SegmentReviewStatus,
     SegmentUpdate,
+    TranslationSource,
 )
 
 router = APIRouter(prefix="/segments", tags=["segments"])
@@ -57,6 +58,8 @@ async def update_segment(
         changed = True
     if payload.translated_text is not None:
         segment.translated_text = payload.translated_text
+        # from now on the worker must not swap in a different wording
+        segment.translation_source = TranslationSource.EDITED.value
         changed = True
     if payload.speaker_label is not None:
         segment.speaker_label = payload.speaker_label
@@ -150,6 +153,8 @@ async def regenerate_segment(
         target_duration_ms=(await media_rooms(db, segment.media_id)).get(
             segment.id, segment.duration_ms
         ),
+        source_text=segment.text,
+        may_rewrite=segment.translation_source != TranslationSource.EDITED.value,
     )
     await redis.rpush(ARTIFACT_QUEUE_KEY, message.model_dump_json())
 

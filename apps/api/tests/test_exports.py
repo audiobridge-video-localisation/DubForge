@@ -139,6 +139,32 @@ async def test_export_mp4_requires_full_readiness(
     assert len(export_calls) == 1
 
 
+async def test_export_anyway_lets_only_long_lines_through(
+    client: AsyncClient, fake_redis: FakeRedis
+) -> None:
+    media_with_job = await _seed_segments(client, count=1)
+    media_id = media_with_job["media"]["id"]
+    segment_id = media_with_job["segments"][0]["id"]
+
+    # approved, but no audio yet: "export anyway" does not skip that
+    await client.post(f"/segments/{segment_id}/approve")
+    response = await client.post(f"/media/{media_id}/export/mp4?accept_long_lines=true")
+    assert response.status_code == 409
+
+    # 3000ms in a 1000ms slot: too long even for the slowed video
+    artifact_id = (await client.post(f"/segments/{segment_id}/regenerate")).json()["id"]
+    await client.patch(
+        f"/internal/artifacts/{artifact_id}",
+        json={"status": "completed", "audio_path": "/tmp/dub.wav", "duration_ms": 3000},
+    )
+    await client.post(f"/segments/{segment_id}/approve")
+    assert (await client.post(f"/media/{media_id}/export/mp4")).status_code == 409
+
+    response = await client.post(f"/media/{media_id}/export/mp4?accept_long_lines=true")
+    assert response.status_code == 201
+    assert len([c for c in fake_redis.calls if c[0] == "dubforge:exports"]) == 1
+
+
 async def test_list_exports_empty_before_any_export(client: AsyncClient) -> None:
     media_with_job = await _upload(client)
 

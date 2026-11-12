@@ -34,7 +34,13 @@ export type ArtifactStatus =
   "pending" | "processing" | "completed" | "failed" | "outdated";
 
 export type SegmentAudioStatus =
-  "no_audio" | "pending" | "failed" | "outdated" | "mismatch" | "ready";
+  | "no_audio"
+  | "pending"
+  | "failed"
+  | "outdated"
+  | "mismatch"
+  | "stretched"
+  | "ready";
 
 export interface Artifact {
   id: string;
@@ -60,6 +66,8 @@ export interface Segment {
   speaker_label: string;
   text: string;
   translated_text: string | null;
+  /** machine = as translated; edited = a person changed it; auto_shortened = DubForge reworded it to fit */
+  translation_source?: "machine" | "edited" | "auto_shortened";
   review_status: SegmentReviewStatus;
   artifact: Artifact | null;
   audio_status: SegmentAudioStatus;
@@ -247,12 +255,26 @@ export function regenerateSegment(segmentId: string): Promise<Artifact> {
   });
 }
 
-export function exportMp3(mediaId: string): Promise<ExportJob> {
-  return request<ExportJob>(`/media/${mediaId}/export/mp3`, { method: "POST" });
+/** `acceptLongLines` is "export anyway": dubs too long to fit still go in (the export
+ *  holds a frame for them). Every other readiness rule still applies. */
+export function exportMp3(
+  mediaId: string,
+  acceptLongLines = false,
+): Promise<ExportJob> {
+  const query = acceptLongLines ? "?accept_long_lines=true" : "";
+  return request<ExportJob>(`/media/${mediaId}/export/mp3${query}`, {
+    method: "POST",
+  });
 }
 
-export function exportMp4(mediaId: string): Promise<ExportJob> {
-  return request<ExportJob>(`/media/${mediaId}/export/mp4`, { method: "POST" });
+export function exportMp4(
+  mediaId: string,
+  acceptLongLines = false,
+): Promise<ExportJob> {
+  const query = acceptLongLines ? "?accept_long_lines=true" : "";
+  return request<ExportJob>(`/media/${mediaId}/export/mp4${query}`, {
+    method: "POST",
+  });
 }
 
 /** The latest export job of each kind for a video, so state survives a page reload. */

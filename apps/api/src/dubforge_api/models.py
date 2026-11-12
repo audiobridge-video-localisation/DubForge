@@ -5,7 +5,12 @@ from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dubforge_api.db import Base
-from dubforge_contracts.models import ArtifactStatus, JobStatus, SegmentReviewStatus
+from dubforge_contracts.models import (
+    ArtifactStatus,
+    JobStatus,
+    SegmentReviewStatus,
+    TranslationSource,
+)
 
 
 class Project(Base):
@@ -70,6 +75,9 @@ class Segment(Base):
     speaker_label: Mapped[str] = mapped_column(String(255), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     translated_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    translation_source: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=TranslationSource.MACHINE.value
+    )
     review_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=SegmentReviewStatus.PENDING.value
     )
