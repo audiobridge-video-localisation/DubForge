@@ -15,7 +15,7 @@ from dubforge_api.config import Settings, get_settings
 from dubforge_api.db import get_db
 from dubforge_api.models import Artifact, ExportJob, Job, Media
 from dubforge_api.models import Segment as SegmentModel
-from dubforge_api.schemas import segment_to_contract
+from dubforge_api.schemas import rooms_by_segment, segment_to_contract
 from dubforge_contracts.models import (
     Artifact as ArtifactContract,
 )
@@ -119,6 +119,8 @@ async def update_artifact(
         artifact.duration_ms = payload.duration_ms
     if payload.voice_profile is not None:
         artifact.voice_profile = payload.voice_profile
+    if payload.speedup is not None:
+        artifact.speedup = payload.speedup
     if payload.error_message is not None:
         artifact.error_message = payload.error_message[-2000:]
     await db.commit()
@@ -142,7 +144,10 @@ async def list_media_segments(
         select(Artifact).where(Artifact.segment_id.in_([s.id for s in segments]))
     )
     artifact_by_segment_id = {a.segment_id: a for a in artifacts_result.scalars()}
-    return [segment_to_contract(s, artifact_by_segment_id.get(s.id)) for s in segments]
+    rooms = rooms_by_segment(segments)
+    return [
+        segment_to_contract(s, artifact_by_segment_id.get(s.id), rooms.get(s.id)) for s in segments
+    ]
 
 
 @router.patch("/export-jobs/{export_job_id}", response_model=ExportJobRead)

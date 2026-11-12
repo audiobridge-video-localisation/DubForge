@@ -11,7 +11,7 @@ from dubforge_pipeline.providers.edge_tts import EdgeTTSProvider, _resolve_voice
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 
 
-def _write_fake_speech_mp3(path: Path) -> None:
+def _write_fake_speech_mp3(path: Path, seconds: float = 1.0) -> None:
     subprocess.run(
         [
             "ffmpeg",
@@ -19,7 +19,7 @@ def _write_fake_speech_mp3(path: Path) -> None:
             "-f",
             "lavfi",
             "-i",
-            "sine=frequency=440:duration=1",
+            f"sine=frequency=440:duration={seconds}",
             "-codec:a",
             "libmp3lame",
             str(path),
@@ -33,25 +33,27 @@ def _write_fake_speech_mp3(path: Path) -> None:
 class FakeCommunicate:
     fail_with: Exception | None = None
     save_calls = 0
-    last_rate: str | None = None
+    rates: list[str] = []
 
     def __init__(self, text: str, voice: str, rate: str = "+0%") -> None:
         self.text = text
         self.voice = voice
-        FakeCommunicate.last_rate = rate
+        self.rate = rate
 
     async def save(self, path: str) -> None:
         FakeCommunicate.save_calls += 1
+        FakeCommunicate.rates.append(self.rate)
         if FakeCommunicate.fail_with is not None:
             raise FakeCommunicate.fail_with
-        _write_fake_speech_mp3(Path(path))
+        # a faster rate makes the fake take shorter, like the real service
+        _write_fake_speech_mp3(Path(path), seconds=1.0 / (1 + int(self.rate.rstrip("%")) / 100))
 
 
 @pytest.fixture(autouse=True)
 def _reset_fake_communicate() -> None:
     FakeCommunicate.fail_with = None
     FakeCommunicate.save_calls = 0
-    FakeCommunicate.last_rate = None
+    FakeCommunicate.rates = []
 
 
 @pytest.fixture(autouse=True)
@@ -90,12 +92,36 @@ def test_synthesize_produces_wav(tmp_path: Path, mock_edge_tts: None) -> None:
     assert FakeCommunicate.save_calls == 1
 
 
-def test_synthesize_ignores_target_duration_ms(tmp_path: Path, mock_edge_tts: None) -> None:
+def test_synthesize_keeps_a_take_that_is_not_too_long(tmp_path: Path, mock_edge_tts: None) -> None:
     provider = EdgeTTSProvider(output_dir=str(tmp_path))
     result = provider.synthesize("Hello there.", "hi", target_duration_ms=999_999)
 
-    # actual_duration_ms reflects the real synthesized audio, not the ignored target
-    assert result.actual_duration_ms != 999_999
+    assert FakeCommunicate.rates == ["+0%"]
+    assert result.speech_rate == 1.0
+    assert result.actual_duration_ms != 999_999  # the real audio length, never the target
+
+
+def test_synthesize_speaks_faster_when_the_take_is_too_long(
+    tmp_path: Path, mock_edge_tts: None
+) -> None:
+    provider = EdgeTTSProvider(output_dir=str(tmp_path))
+    result = provider.synthesize("Hello there.", "hi", target_duration_ms=500)
+
+    assert FakeCommunicate.rates == ["+0%", "+25%"]  # capped at MAX_SPEEDUP
+    assert result.speech_rate == pytest.approx(1.25)
+    assert result.actual_duration_ms < 900  # about 1000 / 1.25
+
+
+def test_synthesize_starts_at_tts_rate_and_speeds_up_on_top_of_it(
+    tmp_path: Path, mock_edge_tts: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TTS_RATE", "+20%")
+    provider = EdgeTTSProvider(output_dir=str(tmp_path))
+    result = provider.synthesize("Hello there.", "hi", target_duration_ms=500)
+
+    # 1.2x is the voice's normal pace; the speed-up for the long line multiplies it
+    assert FakeCommunicate.rates == ["+20%", "+50%"]
+    assert result.speech_rate == pytest.approx(1.25)  # measured from TTS_RATE, not natural
 
 
 def test_synthesize_empty_text_does_not_raise(tmp_path: Path, mock_edge_tts: None) -> None:
@@ -117,7 +143,7 @@ def test_synthesize_unsupported_language_raises_value_error(
 def test_rate_defaults_to_unchanged_speed(tmp_path: Path, mock_edge_tts: None) -> None:
     EdgeTTSProvider(output_dir=str(tmp_path)).synthesize("Hello there.", "hi")
 
-    assert FakeCommunicate.last_rate == "+0%"
+    assert FakeCommunicate.rates[-1] == "+0%"
 
 
 @pytest.mark.parametrize("rate", ["+30%", "-10%", "+0%"])
@@ -128,7 +154,7 @@ def test_rate_from_env_is_passed_to_communicate(
 
     EdgeTTSProvider(output_dir=str(tmp_path)).synthesize("Hello there.", "hi")
 
-    assert FakeCommunicate.last_rate == rate
+    assert FakeCommunicate.rates[-1] == rate
 
 
 def test_rate_argument_overrides_env(
@@ -138,7 +164,7 @@ def test_rate_argument_overrides_env(
 
     EdgeTTSProvider(output_dir=str(tmp_path), rate="+10%").synthesize("Hello there.", "hi")
 
-    assert FakeCommunicate.last_rate == "+10%"
+    assert FakeCommunicate.rates[-1] == "+10%"
 
 
 @pytest.mark.parametrize("rate", ["30%", "+30", "fast", "+3.5%", "+%", "++30%", " +30%", "+30% "])

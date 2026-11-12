@@ -7,9 +7,10 @@ supported or licensed Microsoft API, and carries Terms of Service risk if
 used beyond internal demos. Demo/internal use only - not for commercial
 production.
 
-If target_duration_ms is supplied it is ignored - this provider does not
-perform time-stretching or duration matching against a target; that is
-handled later in the pipeline.
+The first take is spoken at TTS_RATE, the voice's normal pace. If target_duration_ms is
+supplied and that take runs too long for it, the line is spoken again faster on top of
+TTS_RATE (edge-tts's `rate` option), which keeps the voice cleaner than stretching the
+finished audio. Any remaining gap is handled at export, within the same MAX_SPEEDUP.
 """
 
 import asyncio
@@ -22,7 +23,8 @@ import tempfile
 import threading
 from pathlib import Path
 
-from dubforge_contracts.models import AudioResult
+from dubforge_contracts.models import MAX_SPEEDUP, AudioResult
+from dubforge_pipeline.dub_fit import is_too_long, speedup_for
 
 from .base import TTSProvider
 
@@ -60,6 +62,14 @@ def _validate_rate(rate: str) -> str:
             f"Invalid TTS_RATE '{rate}'; expected a signed percentage like '+20%' or '-10%'"
         )
     return rate
+
+
+def _rate_multiplier(rate: str) -> float:
+    return 1 + int(rate.rstrip("%")) / 100
+
+
+def _rate_option(multiplier: float) -> str:
+    return f"{round((multiplier - 1) * 100):+d}%"
 
 
 def _run_edge_tts_sync(text: str, voice: str, mp3_path: Path, rate: str = _DEFAULT_RATE) -> None:
@@ -158,21 +168,32 @@ class EdgeTTSProvider(TTSProvider):
         voice = _resolve_voice(voice_profile)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            mp3_path = Path(tmp_dir) / "speech.mp3"
             tmp_wav_path = Path(tmp_dir) / "speech.wav"
 
-            try:
-                _run_edge_tts_sync(text, voice, mp3_path, self.rate)
-            except Exception as exc:
-                raise RuntimeError(f"edge-tts request failed: {exc}") from exc
+            def take(speedup: float) -> int:
+                # TTS_RATE is the voice's normal pace; a speed-up for a long line goes on top.
+                rate = _rate_option(_rate_multiplier(self.rate) * speedup)
+                mp3_path = Path(tmp_dir) / f"speech-{speedup:.2f}.mp3"
+                try:
+                    _run_edge_tts_sync(text, voice, mp3_path, rate)
+                except Exception as exc:
+                    raise RuntimeError(f"edge-tts request failed: {exc}") from exc
 
-            if not mp3_path.exists() or mp3_path.stat().st_size == 0:
-                raise RuntimeError(
-                    "edge-tts produced no audio output (check internet connectivity)"
-                )
+                if not mp3_path.exists() or mp3_path.stat().st_size == 0:
+                    raise RuntimeError(
+                        "edge-tts produced no audio output (check internet connectivity)"
+                    )
 
-            _convert_mp3_to_wav(mp3_path, tmp_wav_path, self.timeout_s)
-            duration_ms = _get_wav_duration_ms(tmp_wav_path, self.timeout_s)
+                _convert_mp3_to_wav(mp3_path, tmp_wav_path, self.timeout_s)
+                return _get_wav_duration_ms(tmp_wav_path, self.timeout_s)
+
+            duration_ms = take(1.0)
+            used_rate = 1.0
+            if target_duration_ms is not None and is_too_long(duration_ms, target_duration_ms):
+                rate = speedup_for(duration_ms, target_duration_ms, MAX_SPEEDUP)
+                if rate > 1.0:
+                    duration_ms = take(rate)
+                    used_rate = rate
 
             fd, final_path = tempfile.mkstemp(suffix=".wav", dir=self.output_dir)
             os.close(fd)
@@ -184,4 +205,6 @@ class EdgeTTSProvider(TTSProvider):
             len(text),
             duration_ms,
         )
-        return AudioResult(audio_path=final_path, actual_duration_ms=duration_ms)
+        return AudioResult(
+            audio_path=final_path, actual_duration_ms=duration_ms, speech_rate=used_rate
+        )

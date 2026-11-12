@@ -3,8 +3,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-# Never speed speech up by more than this; beyond it the clip is left long.
-MAX_ATEMPO = 1.25
+from dubforge_contracts.models import remaining_speedup
+
 # Overruns up to this fraction of the available room are left untouched.
 NEGLIGIBLE_OVERRUN = 0.10
 
@@ -16,16 +16,17 @@ class SegmentPlacement:
 
 
 def plan_placements(
-    segments: list[tuple[int, int, int]], total_duration_ms: int
+    segments: list[tuple[int, int, int, float]], total_duration_ms: int
 ) -> list[SegmentPlacement]:
     """Decide where each dubbed clip starts and how much to speed it up.
 
-    `segments` holds (start_ms, end_ms, audio_duration_ms) and may be in any
+    `segments` holds (start_ms, end_ms, audio_duration_ms, speedup) and may be in any
     order; the result is in the same order as the input. Clips are processed
     in start order. A clip's room runs from its (possibly pushed) start to the
     next segment's original start (the video end for the last one). Clips that
     overrun their room by more than NEGLIGIBLE_OVERRUN are sped up to fit,
-    capped at MAX_ATEMPO; audio is never trimmed. If a clip still runs past
+    capped so the voice's own speed-up (`speedup`) and this one together stay
+    within MAX_SPEEDUP; audio is never trimmed. If a clip still runs past
     its room, the following clip is pushed later rather than overlapped.
     """
     order = sorted(range(len(segments)), key=lambda i: segments[i][0])
@@ -34,7 +35,8 @@ def plan_placements(
 
     earliest_start_ms = 0
     for position, index in enumerate(order):
-        original_start_ms, _end_ms, audio_ms = segments[index]
+        original_start_ms, _end_ms, audio_ms, speedup = segments[index]
+        max_tempo = remaining_speedup(speedup)
         start_ms = min(max(original_start_ms, earliest_start_ms), latest_start_ms)
 
         if position + 1 < len(order):
@@ -46,11 +48,11 @@ def plan_placements(
         tempo = 1.0
         if audio_ms > 0:
             if room_ms <= 0:
-                tempo = MAX_ATEMPO
+                tempo = max_tempo
             else:
                 ratio = audio_ms / room_ms
                 if ratio > 1 + NEGLIGIBLE_OVERRUN + 1e-9:
-                    tempo = min(ratio, MAX_ATEMPO)
+                    tempo = min(ratio, max_tempo)
 
         placements[index] = SegmentPlacement(start_ms=start_ms, tempo=tempo)
         earliest_start_ms = start_ms + round(audio_ms / tempo)

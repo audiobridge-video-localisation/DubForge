@@ -43,6 +43,7 @@ from dubforge_pipeline.providers.registry import (
     get_tts_provider,
 )
 from dubforge_pipeline.segments import combine_segments, translate_segments
+from dubforge_pipeline.speech_rate import get_ms_per_char, record_take
 from dubforge_pipeline.timing import merge_short_segments
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,11 @@ def _get_tts_provider() -> TTSProvider:
     if _tts_provider_cache is None:
         _tts_provider_cache = get_tts_provider()
     return _tts_provider_cache
+
+
+def _voice_key(lang: str) -> str:
+    """What the learned speech rate is filed under: a voice speaks at its own pace."""
+    return f"{type(_get_tts_provider()).__name__}:{lang}"
 
 
 def reset_provider_cache() -> None:
@@ -167,6 +173,7 @@ def _report_artifact(
     audio_path: str | None = None,
     duration_ms: int | None = None,
     voice_profile: str | None = None,
+    speedup: float | None = None,
     error_message: str | None = None,
 ) -> None:
     payload = ArtifactCallbackUpdate(
@@ -174,6 +181,7 @@ def _report_artifact(
         audio_path=audio_path,
         duration_ms=duration_ms,
         voice_profile=voice_profile,
+        speedup=speedup,
         error_message=error_message,
     )
     try:
@@ -214,7 +222,12 @@ def process_job(
         src_lang = os.environ.get("SOURCE_LANG", "en")
         tgt_lang = _get_target_lang()
         segments = translate_segments(
-            segments, _get_translator(), src_lang=src_lang, tgt_lang=tgt_lang
+            segments,
+            _get_translator(),
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            # pick translations that the voice can say in the time each line has
+            ms_per_char=get_ms_per_char(storage_root, _voice_key(tgt_lang)),
         )
 
         _report(client, api_base_url, job_id, JobStatus.PROCESSING, progress=90)
@@ -241,7 +254,20 @@ def process_artifact(
 
     try:
         voice_profile = _get_target_lang()
-        result = _get_tts_provider().synthesize(message.text, voice_profile=voice_profile)
+        result = _get_tts_provider().synthesize(
+            message.text,
+            voice_profile=voice_profile,
+            target_duration_ms=message.target_duration_ms,
+        )
+        if result.speech_rate is not None:
+            record_take(
+                storage_root,
+                _voice_key(voice_profile),
+                message.text,
+                result.actual_duration_ms,
+                result.speech_rate,
+            )
+        # Any speed-up still needed happens at export, within what is left of MAX_SPEEDUP.
         relative_audio_path = _persist_artifact_audio(result.audio_path, storage_root, artifact_id)
     except Exception as exc:  # defensive: never let a bad artifact crash the worker loop
         logger.exception("Artifact %s failed", artifact_id)
@@ -257,6 +283,7 @@ def process_artifact(
         audio_path=relative_audio_path,
         duration_ms=result.actual_duration_ms,
         voice_profile=voice_profile,
+        speedup=result.speech_rate or 1.0,
     )
 
 
@@ -299,7 +326,7 @@ def process_export_job(
         total_duration_ms = probe_duration_ms(video_path)
 
         audio_paths: list[str] = []
-        timings: list[tuple[int, int, int]] = []
+        timings: list[tuple[int, int, int, float]] = []
         for segment in segments:
             if segment.artifact is None or segment.artifact.audio_path is None:
                 raise RuntimeError(f"segment {segment.id} has no usable audio artifact")
@@ -310,7 +337,7 @@ def process_export_job(
                 )
             audio_ms = segment.artifact.duration_ms or probe_duration_ms(abs_path)
             audio_paths.append(abs_path)
-            timings.append((segment.start_ms, segment.end_ms, audio_ms))
+            timings.append((segment.start_ms, segment.end_ms, audio_ms, segment.artifact.speedup))
 
         placements = plan_placements(timings, total_duration_ms)
 

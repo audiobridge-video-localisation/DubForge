@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from dubforge_contracts.models import MAX_SPEEDUP
 from dubforge_pipeline.export_assembly import (
-    MAX_ATEMPO,
     SegmentPlacement,
     apply_tempo,
     build_dub_audio_track,
@@ -22,50 +22,64 @@ def test_plan_placements_empty_list() -> None:
 
 
 def test_plan_placements_fitting_audio_is_untouched() -> None:
-    placements = plan_placements([(0, 1000, 900), (2000, 3000, 1000)], 5000)
+    placements = plan_placements([(0, 1000, 900, 1.0), (2000, 3000, 1000, 1.0)], 5000)
     assert placements == [SegmentPlacement(0, 1.0), SegmentPlacement(2000, 1.0)]
 
 
 def test_plan_placements_negligible_overrun_is_not_stretched() -> None:
     # 1100ms of audio in a 1000ms room is exactly 10% over: left alone, but
     # the next clip is still pushed so the two don't overlap.
-    placements = plan_placements([(0, 1000, 1100), (1000, 2000, 500)], 3000)
+    placements = plan_placements([(0, 1000, 1100, 1.0), (1000, 2000, 500, 1.0)], 3000)
     assert placements[0] == SegmentPlacement(0, 1.0)
     assert placements[1] == SegmentPlacement(1100, 1.0)
 
 
 def test_plan_placements_twenty_percent_overrun_gets_1_2x() -> None:
-    placements = plan_placements([(0, 1000, 1200), (1000, 2000, 500)], 3000)
+    placements = plan_placements([(0, 1000, 1200, 1.0), (1000, 2000, 500, 1.0)], 3000)
     assert placements[0].start_ms == 0
     assert placements[0].tempo == pytest.approx(1.2)
     # Stretched clip now ends exactly at the next original start: no push.
     assert placements[1] == SegmentPlacement(1000, 1.0)
 
 
-def test_plan_placements_large_overrun_is_capped_at_max_atempo() -> None:
-    placements = plan_placements([(0, 1000, 3000), (1000, 2000, 500)], 10_000)
-    assert placements[0].tempo == MAX_ATEMPO
+def test_plan_placements_large_overrun_is_capped_at_max_speedup() -> None:
+    placements = plan_placements([(0, 1000, 3000, 1.0), (1000, 2000, 500, 1.0)], 10_000)
+    assert placements[0].tempo == MAX_SPEEDUP
     # 3000ms / 1.25 = 2400ms, so the next clip is pushed there.
     assert placements[1].start_ms == 2400
 
 
 def test_plan_placements_pushes_following_segments_after_unresolved_overrun() -> None:
-    placements = plan_placements([(0, 1000, 3000), (1000, 2000, 1000), (2000, 3000, 500)], 10_000)
+    placements = plan_placements(
+        [(0, 1000, 3000, 1.0), (1000, 2000, 1000, 1.0), (2000, 3000, 500, 1.0)], 10_000
+    )
     # seg0 ends at 2400 (capped), seg1 starts there with no room left (past
     # seg2's original start) so it also takes the max speed-up and ends at
     # 3200, which pushes seg2.
     assert [p.start_ms for p in placements] == [0, 2400, 3200]
-    assert [p.tempo for p in placements] == [MAX_ATEMPO, MAX_ATEMPO, 1.0]
+    assert [p.tempo for p in placements] == [MAX_SPEEDUP, MAX_SPEEDUP, 1.0]
 
 
 def test_plan_placements_preserves_input_order_for_unsorted_input() -> None:
-    placements = plan_placements([(2000, 3000, 500), (0, 1000, 1200), (1000, 2000, 500)], 5000)
+    placements = plan_placements(
+        [(2000, 3000, 500, 1.0), (0, 1000, 1200, 1.0), (1000, 2000, 500, 1.0)], 5000
+    )
     assert [p.start_ms for p in placements] == [2000, 0, 1000]
     assert placements[1].tempo == pytest.approx(1.2)
 
 
+def test_plan_placements_only_uses_what_the_voice_left_of_the_speed_up() -> None:
+    # The voice already spoke 1.25x faster: export may not speed it up any more.
+    placements = plan_placements([(0, 1000, 1200, MAX_SPEEDUP), (1000, 2000, 500, 1.0)], 3000)
+    assert placements[0].tempo == 1.0
+    assert placements[1].start_ms == 1200
+    # 1.1x by the voice leaves about 1.136x for export
+    placements = plan_placements([(0, 1000, 1200, 1.1), (1000, 2000, 500, 1.0)], 3000)
+    assert placements[0].tempo == pytest.approx(MAX_SPEEDUP / 1.1)
+
+
 def test_plan_placements_clamps_start_below_total_duration() -> None:
-    placements = plan_placements([(0, 1000, 50_000), (1000, 2000, 1000)], 5000)
+    placements = plan_placements([(0, 1000, 50_000, 1.0), (1000, 2000, 1000, 1.0)], 5000)
     assert placements[1].start_ms == 4999
 
 

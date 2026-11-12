@@ -11,6 +11,7 @@ from dubforge_api.db import get_db
 from dubforge_api.models import Artifact as ArtifactModel
 from dubforge_api.models import Segment as SegmentModel
 from dubforge_api.redis_client import get_redis
+from dubforge_api.rooms import media_rooms
 from dubforge_api.schemas import segment_to_contract
 from dubforge_api.storage import resolve_stored_file
 from dubforge_contracts.models import (
@@ -79,7 +80,9 @@ async def update_segment(
         await db.refresh(artifact, attribute_names=["updated_at"])
     else:
         await db.commit()
-    return segment_to_contract(segment, artifact)
+    return segment_to_contract(
+        segment, artifact, (await media_rooms(db, segment.media_id)).get(segment.id)
+    )
 
 
 @router.post("/{segment_id}/approve", response_model=Segment)
@@ -91,7 +94,9 @@ async def approve_segment(segment_id: uuid.UUID, db: AsyncSession = Depends(get_
     segment.review_status = SegmentReviewStatus.APPROVED.value
     artifact = await _get_artifact_for_segment(segment_id, db)
     await db.commit()
-    return segment_to_contract(segment, artifact)
+    return segment_to_contract(
+        segment, artifact, (await media_rooms(db, segment.media_id)).get(segment.id)
+    )
 
 
 @router.post("/{segment_id}/request-changes", response_model=Segment)
@@ -105,7 +110,9 @@ async def request_segment_changes(
     segment.review_status = SegmentReviewStatus.NEEDS_CHANGES.value
     artifact = await _get_artifact_for_segment(segment_id, db)
     await db.commit()
-    return segment_to_contract(segment, artifact)
+    return segment_to_contract(
+        segment, artifact, (await media_rooms(db, segment.media_id)).get(segment.id)
+    )
 
 
 @router.post("/{segment_id}/regenerate", response_model=Artifact)
@@ -140,6 +147,9 @@ async def regenerate_segment(
         artifact_id=artifact.id,
         segment_id=segment.id,
         text=text,
+        target_duration_ms=(await media_rooms(db, segment.media_id)).get(
+            segment.id, segment.duration_ms
+        ),
     )
     await redis.rpush(ARTIFACT_QUEUE_KEY, message.model_dump_json())
 

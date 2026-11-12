@@ -42,6 +42,7 @@ export interface Artifact {
   audio_path: string | null;
   duration_ms: number | null;
   voice_profile: string | null;
+  speedup: number;
   error_message: string | null;
   retry_count: number;
   created_at: string;
@@ -54,6 +55,8 @@ export interface Segment {
   start_ms: number;
   end_ms: number;
   duration_ms: number;
+  /** how long a dub may run: up to the next line's start */
+  room_ms?: number | null;
   speaker_label: string;
   text: string;
   translated_text: string | null;

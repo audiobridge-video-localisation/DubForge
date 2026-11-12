@@ -35,8 +35,19 @@ class FakeConfig:
 
 
 class FakeVitsModelInstance:
+    speaking_rate = 1.0
+    rates_seen: list[float]
+
+    def __init__(self) -> None:
+        self.rates_seen = []
+
     def __call__(self, **inputs: object) -> FakeModelOutput:
-        num_samples = max(len(inputs.get("input_ids", [[0]])[0]) * 1000, 100)  # type: ignore[index]
+        self.rates_seen.append(self.speaking_rate)
+        # a larger speaking_rate gives shorter speech, like the real model
+        num_samples = int(
+            max(len(inputs.get("input_ids", [[0]])[0]) * 1000, 100)  # type: ignore[index]
+            / self.speaking_rate
+        )
         array = np.zeros(num_samples, dtype=np.float32)
         return FakeModelOutput(FakeTensor(array))
 
@@ -177,3 +188,30 @@ def test_lazy_load_happens_per_language(tmp_path: Path, mock_ml_deps: None) -> N
 
     assert FakeAutoTokenizer.load_count == 2
     assert FakeVitsModel.load_count == 2
+
+
+def test_synthesize_speaks_faster_when_the_take_is_too_long(
+    tmp_path: Path, mock_ml_deps: None
+) -> None:
+    provider = MMSTTSProvider(output_dir=str(tmp_path))
+    result = provider.synthesize("x" * 16, "hi", target_duration_ms=500)  # 16 chars = 1000 ms
+
+    model = next(iter(provider._models.values()))
+    assert model.rates_seen[0] == 1.0
+    assert max(model.rates_seen) == 1.25  # capped at MAX_SPEEDUP
+    assert abs(result.actual_duration_ms - 1000 / 1.25) < 25
+    assert result.speech_rate == pytest.approx(1.25)
+    assert model.speaking_rate == 1.0  # the shared model is left at its normal speed
+
+
+@pytest.mark.parametrize("target_ms", [None, 1000, 5000])
+def test_synthesize_does_not_change_speed_when_the_take_fits(
+    tmp_path: Path, mock_ml_deps: None, target_ms: int | None
+) -> None:
+    provider = MMSTTSProvider(output_dir=str(tmp_path))
+    result = provider.synthesize("x" * 16, "hi", target_duration_ms=target_ms)
+
+    model = next(iter(provider._models.values()))
+    assert model.rates_seen == [1.0]
+    assert abs(result.actual_duration_ms - 1000) < 5
+    assert result.speech_rate == 1.0
