@@ -9,6 +9,7 @@ in containers: web (nginx), api, pipeline (worker), Postgres and Redis.
 | --- | --- | --- |
 | Mock providers, or Whisper `small.en` only | 2 GB **plus a 2 GB swap file** | 20 GB |
 | Real translation and voices (`PIPELINE_EXTRAS="nllb tts-mms"`) | 8 GB or more | 40 GB or more |
+| Also keeping background sound (`PIPELINE_EXTRAS="nllb tts-mms background"`) | 8 GB or more | 40 GB or more |
 
 One vCPU works but builds and transcription are slow.
 

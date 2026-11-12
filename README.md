@@ -37,6 +37,10 @@ before starting the next. Stop with `Ctrl+C`; start it again later with `docker 
 - **Providers** default to the built-in mock ones. Set `STT_PROVIDER=whisper` (and, for real
   translation or voices, `TRANSLATION_PROVIDER` / `TTS_PROVIDER` with `PIPELINE_EXTRAS`) in
   `.env`, then `docker compose up --build`. Downloaded models are cached in a volume.
+- **Background sound:** add `background` to `PIPELINE_EXTRAS` to keep a video's music and room
+  sound under the dub (Demucs separates the voice from the rest on the first export, then the
+  result is reused). Set `KEEP_BACKGROUND=0` to switch it off. Without it, exports carry only
+  the dub.
 - Run in the background with `docker compose up -d --build`; watch logs with
   `docker compose logs -f api pipeline`.
 - To repeat the demo from a clean state: `scripts/demo.sh fresh` (see `DEMO.md`). It resets all

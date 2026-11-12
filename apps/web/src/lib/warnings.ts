@@ -1,21 +1,14 @@
 import type { MediaWithJob } from "../api/client";
 
 // Heads-ups for things that have not failed yet but probably will, or will not give the
-// result a person expects. Derived from data the API already returns, like workflow.ts.
+// result a person expects. Only things a person should act on: a line that fits (even one
+// the export quietly speeds up or slows down for) gets no warning. Derived from data the API already returns, like workflow.ts.
 
 export interface Warning {
   id: string;
   title: string;
   detail: string;
 }
-
-// Mirrors compute_audio_status in packages/contracts: a dub only counts as a mismatch
-// when it is LONGER than its room (the line plus the silence before the next line) by more
-// than max(0.3 s, 25%). Shorter is fine.
-const MISMATCH_ABS_MS = 300;
-const MISMATCH_REL = 0.25;
-// Past this share of the tolerance, a line fits today but a small edit will break it.
-const NEAR_LIMIT = 0.8;
 
 // Rough speech rate for dubbed lines. Above it a voice has to rush to fit the slot.
 const MAX_CHARS_PER_SECOND = 18;
@@ -32,14 +25,6 @@ export function canRetryStalledJob(
 ): boolean {
   const inFlight = job.status === "pending" || job.status === "processing";
   return inFlight && now - new Date(job.updated_at).getTime() > STALL_RETRY_MS;
-}
-
-function roomOf(s: { duration_ms: number; room_ms?: number | null }): number {
-  return Math.max(s.room_ms ?? 0, s.duration_ms);
-}
-
-function tolerance(durationMs: number): number {
-  return Math.max(MISMATCH_ABS_MS, MISMATCH_REL * durationMs);
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -98,21 +83,6 @@ export function deriveWarnings(
   }
 
   // Generated and fitting, but only just.
-  const tight = segments.filter((s) => {
-    const dubbed = s.artifact?.duration_ms;
-    if (s.audio_status !== "ready" || dubbed == null) return false;
-    const limit = tolerance(roomOf(s));
-    return dubbed - roomOf(s) > limit * NEAR_LIMIT;
-  });
-  if (tight.length > 0) {
-    warnings.push({
-      id: "tight-fit",
-      title: `${plural(tight.length, "dubbed line is", "dubbed lines are")} close to the timing limit`,
-      detail:
-        "They fit now, but editing the text or timing is likely to push them out of range.",
-    });
-  }
-
   // Approval no longer reflects the audio that would be exported.
   const staleAudio = segments.filter(
     (s) => s.review_status === "approved" && s.audio_status === "outdated",

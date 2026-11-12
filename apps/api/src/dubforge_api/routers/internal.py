@@ -21,11 +21,14 @@ from dubforge_contracts.models import (
 )
 from dubforge_contracts.models import (
     ArtifactCallbackUpdate,
+    ArtifactStatus,
     ExportJobCallbackUpdate,
     ExportJobRead,
     JobCallbackUpdate,
     JobRead,
     Segment,
+    SegmentReviewStatus,
+    TranslationSource,
 )
 
 router = APIRouter(prefix="/internal", tags=["internal"])
@@ -95,6 +98,7 @@ async def replace_segments(
             speaker_label=segment.speaker_label,
             text=segment.text,
             translated_text=segment.translated_text,
+            translation_source=segment.translation_source.value,
         )
         for segment in payload
     )
@@ -123,9 +127,26 @@ async def update_artifact(
         artifact.speedup = payload.speedup
     if payload.error_message is not None:
         artifact.error_message = payload.error_message[-2000:]
+    if payload.translated_text is not None:
+        await _apply_shortened_text(db, artifact, payload.translated_text)
     await db.commit()
     await db.refresh(artifact, attribute_names=["updated_at"])
     return artifact
+
+
+async def _apply_shortened_text(db: AsyncSession, artifact: Artifact, text: str) -> None:
+    """The worker made this audio from a shorter wording than the segment has. Adopt the
+    wording and ask for a fresh review, unless a person edited the line in the meantime: then
+    their text stands and this audio no longer matches it."""
+    segment = await db.get(SegmentModel, artifact.segment_id)
+    if segment is None or segment.translated_text == text:
+        return
+    if segment.translation_source == TranslationSource.EDITED.value:
+        artifact.status = ArtifactStatus.OUTDATED.value
+        return
+    segment.translated_text = text
+    segment.translation_source = TranslationSource.AUTO_SHORTENED.value
+    segment.review_status = SegmentReviewStatus.PENDING.value
 
 
 @router.get("/media/{media_id}/segments", response_model=list[Segment])

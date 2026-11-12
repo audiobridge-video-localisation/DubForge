@@ -1,4 +1,5 @@
 import subprocess
+import wave
 from pathlib import Path
 
 
@@ -28,3 +29,8 @@ def extract_audio(video_path: str, output_path: str, timeout_s: int = 600) -> st
     if not Path(output_path).exists():
         raise RuntimeError("ffmpeg reported success but output file is missing")
     return output_path
+
+
+def wav_duration_ms(path: str) -> int:
+    with wave.open(path, "rb") as wav_file:
+        return round(wav_file.getnframes() / wav_file.getframerate() * 1000)

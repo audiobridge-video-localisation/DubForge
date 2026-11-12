@@ -805,6 +805,14 @@ a {
   margin: 0;
 }
 
+.app .auto-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--a-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
 /* export center */
 .app .export-center {
   display: grid;
@@ -925,6 +933,10 @@ a {
   align-items: center;
   gap: 8px;
   margin: 0;
+}
+.app .xc-blockers.xc-pausing {
+  border-color: #d9b98a;
+  background: #fdf7ee;
 }
 .app .xc-stale {
   flex-basis: 100%;

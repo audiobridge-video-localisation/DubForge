@@ -40,6 +40,14 @@ class SegmentReviewStatus(StrEnum):
     NEEDS_CHANGES = "needs_changes"
 
 
+class TranslationSource(StrEnum):
+    """Where a segment's translated text came from, so a person's edits are never overwritten."""
+
+    MACHINE = "machine"
+    EDITED = "edited"  # a person changed it
+    AUTO_SHORTENED = "auto_shortened"  # the worker swapped in a shorter wording to fit the time
+
+
 class ArtifactStatus(StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"
@@ -56,7 +64,14 @@ class SegmentAudioStatus(StrEnum):
     FAILED = "failed"
     OUTDATED = "outdated"
     MISMATCH = "mismatch"
+    # Longer than its room, but the export absorbs it by also slowing the video behind
+    # the line (see dubforge_pipeline.export_assembly.plan_timeline). Usable.
+    STRETCHED = "stretched"
     READY = "ready"
+
+
+# Statuses whose audio can go into an export.
+USABLE_AUDIO_STATUSES = frozenset({SegmentAudioStatus.READY, SegmentAudioStatus.STRETCHED})
 
 
 # The most a dubbed line is ever sped up past the voice's normal pace, counting every step:
@@ -66,6 +81,12 @@ MAX_SPEEDUP = 1.25
 # Audio shorter than this share of its slot is more likely a clipped or silent take than
 # a terse translation.
 MIN_AUDIO_SHARE = 0.25
+# The most the export slows the video behind a long line (setpts). Like a 1.25x speed-up,
+# 1.25x slower talking footage is hard to notice.
+MAX_VIDEO_SLOWDOWN = 1.25
+# Audio up to this many times its room fits with both: 1.25x faster speech over 1.25x
+# slower video. Longer than that is a mismatch a person has to look at.
+MAX_TIMELINE_STRETCH = MAX_SPEEDUP * MAX_VIDEO_SLOWDOWN
 
 
 class MediaRead(BaseModel):
@@ -159,8 +180,10 @@ def compute_audio_status(
     if artifact.status == ArtifactStatus.OUTDATED:
         return SegmentAudioStatus.OUTDATED
 
-    # COMPLETED: audio longer than export can speed up into its room is a mismatch. Shorter
-    # audio just leaves silence, which is fine, unless so short it is likely broken.
+    # COMPLETED: only audio LONGER than export can speed up into its room is a problem;
+    # shorter audio just leaves silence, which is fine, unless so short it is likely
+    # broken. Longer audio the export can absorb by also slowing the video is
+    # "stretched"; past that it is a mismatch.
     if artifact.duration_ms is None:
         return SegmentAudioStatus.MISMATCH
     if artifact.duration_ms <= 0:
@@ -168,9 +191,12 @@ def compute_audio_status(
     if artifact.duration_ms < MIN_AUDIO_SHARE * segment_duration_ms:
         return SegmentAudioStatus.MISMATCH
     available_ms = max(room_ms or 0, segment_duration_ms)
-    if artifact.duration_ms > available_ms * remaining_speedup(artifact.speedup):
-        return SegmentAudioStatus.MISMATCH
-    return SegmentAudioStatus.READY
+    fits_ms = available_ms * remaining_speedup(artifact.speedup)
+    if artifact.duration_ms <= fits_ms:
+        return SegmentAudioStatus.READY
+    if artifact.duration_ms <= fits_ms * MAX_VIDEO_SLOWDOWN:
+        return SegmentAudioStatus.STRETCHED
+    return SegmentAudioStatus.MISMATCH
 
 
 class Segment(BaseModel):
@@ -193,6 +219,7 @@ class Segment(BaseModel):
     speaker_label: str
     text: str
     translated_text: str | None = None
+    translation_source: TranslationSource = TranslationSource.MACHINE
     review_status: SegmentReviewStatus = SegmentReviewStatus.PENDING
     artifact: Artifact | None = None
     audio_status: SegmentAudioStatus = SegmentAudioStatus.NO_AUDIO
@@ -227,6 +254,10 @@ class ArtifactQueueMessage(BaseModel):
     # The segment's slot length. The worker time-fits the generated audio to it when it is
     # close enough to stretch without sounding rushed. None = leave the audio as generated.
     target_duration_ms: int | None = None
+    # The line in the source language, and whether the worker may swap in a shorter wording
+    # when the dub still does not fit. False once a person has edited the translation.
+    source_text: str | None = None
+    may_rewrite: bool = False
 
 
 class ArtifactCallbackUpdate(BaseModel):
@@ -238,6 +269,8 @@ class ArtifactCallbackUpdate(BaseModel):
     voice_profile: str | None = None
     speedup: float | None = None
     error_message: str | None = None
+    # Set when the worker shortened the wording to make the audio fit; the audio matches it.
+    translated_text: str | None = None
 
 
 class ExportKind(StrEnum):

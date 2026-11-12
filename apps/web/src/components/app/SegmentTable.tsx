@@ -35,7 +35,9 @@ const AUDIO_LABEL: Record<SegmentAudioStatus, string> = {
   pending: "Generating",
   failed: "Failed",
   outdated: "Outdated",
-  mismatch: "Duration mismatch",
+  mismatch: "Video pauses here",
+  // the export absorbs it without anyone noticing, so to a person it is just ready
+  stretched: "Ready",
   ready: "Ready",
 };
 const AUDIO_TONE: Record<SegmentAudioStatus, Tone> = {
@@ -43,7 +45,8 @@ const AUDIO_TONE: Record<SegmentAudioStatus, Tone> = {
   pending: "info",
   failed: "danger",
   outdated: "warn",
-  mismatch: "warn",
+  mismatch: "info",
+  stretched: "ok",
   ready: "ok",
 };
 
@@ -292,7 +295,7 @@ function SegmentRow({
 
   const audioNote =
     segment.audio_status === "mismatch" && segment.artifact?.duration_ms != null
-      ? `Expected ${formatDuration(segment.duration_ms)}, got ${formatDuration(segment.artifact.duration_ms)}`
+      ? `The dub is ${formatDuration(segment.artifact.duration_ms)} for ${formatDuration(Math.max(segment.room_ms ?? 0, segment.duration_ms))}, so the export holds the picture until it ends. Shorten the translation if you'd rather it didn't.`
       : segment.audio_status === "failed"
         ? (segment.artifact?.error_message ?? null)
         : null;
@@ -340,6 +343,14 @@ function SegmentRow({
         </td>
         <td className="c-text c-tr" data-label="Translation">
           {segment.translated_text ?? <em>Not translated</em>}
+          {segment.translation_source === "auto_shortened" && (
+            <span
+              className="auto-note"
+              title="The first wording was too long to be spoken in time, so DubForge used a shorter one. Edit the line to change it."
+            >
+              Shortened automatically
+            </span>
+          )}
         </td>
         <td className="c-status" data-label="Status">
           <div className="status-stack">
