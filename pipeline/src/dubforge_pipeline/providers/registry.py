@@ -6,6 +6,7 @@ from .edge_tts import EdgeTTSProvider
 from .mms_tts import MMSTTSProvider
 from .mock import MockSTTProvider, MockTranslationProvider, MockTTSProvider
 from .nllb import NLLBTranslationProvider
+from .nllb_ct2 import NLLBCT2TranslationProvider
 from .whisper import WhisperSTTProvider
 
 _STT_FACTORIES: dict[str, Callable[[], STTProvider]] = {
@@ -20,6 +21,7 @@ _STT_FACTORIES: dict[str, Callable[[], STTProvider]] = {
 _TRANSLATION_FACTORIES: dict[str, Callable[[], TranslationProvider]] = {
     "mock": lambda: MockTranslationProvider(),
     "nllb": lambda: NLLBTranslationProvider(),
+    "nllb-ct2": lambda: NLLBCT2TranslationProvider(),
 }
 
 _TTS_FACTORIES: dict[str, Callable[[], TTSProvider]] = {
