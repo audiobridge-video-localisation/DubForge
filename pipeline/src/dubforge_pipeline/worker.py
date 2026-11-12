@@ -24,7 +24,7 @@ from dubforge_contracts.models import (
     SpeakerSegment,
     TranscriptSegment,
 )
-from dubforge_pipeline.audio import extract_audio, fit_audio_duration
+from dubforge_pipeline.audio import extract_audio
 from dubforge_pipeline.export_assembly import (
     apply_tempo,
     build_dub_audio_track,
@@ -173,6 +173,7 @@ def _report_artifact(
     audio_path: str | None = None,
     duration_ms: int | None = None,
     voice_profile: str | None = None,
+    speedup: float | None = None,
     error_message: str | None = None,
 ) -> None:
     payload = ArtifactCallbackUpdate(
@@ -180,6 +181,7 @@ def _report_artifact(
         audio_path=audio_path,
         duration_ms=duration_ms,
         voice_profile=voice_profile,
+        speedup=speedup,
         error_message=error_message,
     )
     try:
@@ -257,7 +259,6 @@ def process_artifact(
             voice_profile=voice_profile,
             target_duration_ms=message.target_duration_ms,
         )
-        audio_path, duration_ms = result.audio_path, result.actual_duration_ms
         if result.speech_rate is not None:
             record_take(
                 storage_root,
@@ -266,15 +267,8 @@ def process_artifact(
                 result.actual_duration_ms,
                 result.speech_rate,
             )
-        if message.target_duration_ms is not None:
-            try:
-                audio_path, duration_ms = fit_audio_duration(
-                    audio_path, duration_ms, message.target_duration_ms
-                )
-            except RuntimeError:
-                # an unfitted take can still be reviewed (it just shows as a mismatch)
-                logger.warning("Artifact %s: could not fit audio to its slot", artifact_id)
-        relative_audio_path = _persist_artifact_audio(audio_path, storage_root, artifact_id)
+        # Any speed-up still needed happens at export, within what is left of MAX_SPEEDUP.
+        relative_audio_path = _persist_artifact_audio(result.audio_path, storage_root, artifact_id)
     except Exception as exc:  # defensive: never let a bad artifact crash the worker loop
         logger.exception("Artifact %s failed", artifact_id)
         _report_artifact(
@@ -287,8 +281,9 @@ def process_artifact(
         artifact_id,
         ArtifactStatus.COMPLETED,
         audio_path=relative_audio_path,
-        duration_ms=duration_ms,
+        duration_ms=result.actual_duration_ms,
         voice_profile=voice_profile,
+        speedup=result.speech_rate or 1.0,
     )
 
 
@@ -331,7 +326,7 @@ def process_export_job(
         total_duration_ms = probe_duration_ms(video_path)
 
         audio_paths: list[str] = []
-        timings: list[tuple[int, int, int]] = []
+        timings: list[tuple[int, int, int, float]] = []
         for segment in segments:
             if segment.artifact is None or segment.artifact.audio_path is None:
                 raise RuntimeError(f"segment {segment.id} has no usable audio artifact")
@@ -342,7 +337,7 @@ def process_export_job(
                 )
             audio_ms = segment.artifact.duration_ms or probe_duration_ms(abs_path)
             audio_paths.append(abs_path)
-            timings.append((segment.start_ms, segment.end_ms, audio_ms))
+            timings.append((segment.start_ms, segment.end_ms, audio_ms, segment.artifact.speedup))
 
         placements = plan_placements(timings, total_duration_ms)
 

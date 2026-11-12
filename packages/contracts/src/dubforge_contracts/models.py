@@ -21,8 +21,9 @@ class SpeakerSegment(BaseModel):
 class AudioResult(BaseModel):
     audio_path: str
     actual_duration_ms: int
-    # How much faster than its natural pace the voice was asked to speak (1.0 = natural).
-    # None means this is not a real voice (the mock), so nothing can be learned from it.
+    # How much faster than its normal pace (TTS_RATE, if set) the voice was asked to speak
+    # to fit the line (1.0 = normal). None means this is not a real voice (the mock), so
+    # nothing can be learned from it.
     speech_rate: float | None = None
 
 
@@ -58,10 +59,13 @@ class SegmentAudioStatus(StrEnum):
     READY = "ready"
 
 
-AUDIO_MISMATCH_ABS_TOLERANCE_MS = 300
-# 0.25 matches MAX_ATEMPO (1.25) in dubforge_pipeline.export_assembly: audio up to
-# 25% longer than its slot can be sped up to fit at export time.
-AUDIO_MISMATCH_REL_TOLERANCE = 0.25
+# The most a dubbed line is ever sped up past the voice's normal pace, counting every step:
+# the voice speaking faster when it is synthesised and the speed-up at export together.
+# Past this it sounds rushed, so a line that would need more is flagged for a person.
+MAX_SPEEDUP = 1.25
+# Audio shorter than this share of its slot is more likely a clipped or silent take than
+# a terse translation.
+MIN_AUDIO_SHARE = 0.25
 
 
 class MediaRead(BaseModel):
@@ -114,6 +118,8 @@ class Artifact(BaseModel):
     audio_path: str | None = None
     duration_ms: int | None = None
     voice_profile: str | None = None
+    # How much the voice was already sped up for this take (see MAX_SPEEDUP).
+    speedup: float = 1.0
     error_message: str | None = None
     retry_count: int = 0
     created_at: datetime
@@ -132,6 +138,11 @@ def segment_room_ms(start_ms: int, duration_ms: int, next_start_ms: int | None) 
     return max(duration_ms, next_start_ms - start_ms)
 
 
+def remaining_speedup(already: float) -> float:
+    """How much more a take that was already sped up `already` times may be sped up."""
+    return max(MAX_SPEEDUP / max(already, 1.0), 1.0)
+
+
 def compute_audio_status(
     segment_duration_ms: int, artifact: Artifact | None, room_ms: int | None = None
 ) -> SegmentAudioStatus:
@@ -148,13 +159,16 @@ def compute_audio_status(
     if artifact.status == ArtifactStatus.OUTDATED:
         return SegmentAudioStatus.OUTDATED
 
-    # COMPLETED: only audio LONGER than its room beyond tolerance is a mismatch;
-    # shorter audio just leaves silence, which is fine.
+    # COMPLETED: audio longer than export can speed up into its room is a mismatch. Shorter
+    # audio just leaves silence, which is fine, unless so short it is likely broken.
     if artifact.duration_ms is None:
         return SegmentAudioStatus.MISMATCH
+    if artifact.duration_ms <= 0:
+        return SegmentAudioStatus.FAILED
+    if artifact.duration_ms < MIN_AUDIO_SHARE * segment_duration_ms:
+        return SegmentAudioStatus.MISMATCH
     available_ms = max(room_ms or 0, segment_duration_ms)
-    tolerance_ms = max(AUDIO_MISMATCH_ABS_TOLERANCE_MS, AUDIO_MISMATCH_REL_TOLERANCE * available_ms)
-    if artifact.duration_ms - available_ms > tolerance_ms:
+    if artifact.duration_ms > available_ms * remaining_speedup(artifact.speedup):
         return SegmentAudioStatus.MISMATCH
     return SegmentAudioStatus.READY
 
@@ -222,6 +236,7 @@ class ArtifactCallbackUpdate(BaseModel):
     audio_path: str | None = None
     duration_ms: int | None = None
     voice_profile: str | None = None
+    speedup: float | None = None
     error_message: str | None = None
 
 

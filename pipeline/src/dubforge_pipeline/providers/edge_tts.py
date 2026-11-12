@@ -10,7 +10,7 @@ production.
 The first take is spoken at TTS_RATE, the voice's normal pace. If target_duration_ms is
 supplied and that take runs too long for it, the line is spoken again faster on top of
 TTS_RATE (edge-tts's `rate` option), which keeps the voice cleaner than stretching the
-finished audio. Any remaining gap is handled later in the pipeline.
+finished audio. Any remaining gap is handled at export, within the same MAX_SPEEDUP.
 """
 
 import asyncio
@@ -23,8 +23,8 @@ import tempfile
 import threading
 from pathlib import Path
 
-from dubforge_contracts.models import AudioResult
-from dubforge_pipeline.dub_fit import MAX_NATURAL_RATE, is_too_long, speedup_for
+from dubforge_contracts.models import MAX_SPEEDUP, AudioResult
+from dubforge_pipeline.dub_fit import is_too_long, speedup_for
 
 from .base import TTSProvider
 
@@ -190,7 +190,7 @@ class EdgeTTSProvider(TTSProvider):
             duration_ms = take(1.0)
             used_rate = 1.0
             if target_duration_ms is not None and is_too_long(duration_ms, target_duration_ms):
-                rate = speedup_for(duration_ms, target_duration_ms, MAX_NATURAL_RATE)
+                rate = speedup_for(duration_ms, target_duration_ms, MAX_SPEEDUP)
                 if rate > 1.0:
                     duration_ms = take(rate)
                     used_rate = rate

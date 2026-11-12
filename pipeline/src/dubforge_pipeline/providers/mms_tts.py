@@ -17,8 +17,8 @@ import tempfile
 import time
 from typing import Any
 
-from dubforge_contracts.models import AudioResult
-from dubforge_pipeline.dub_fit import MAX_NATURAL_RATE, is_too_long, speedup_for
+from dubforge_contracts.models import MAX_SPEEDUP, AudioResult
+from dubforge_pipeline.dub_fit import is_too_long, speedup_for
 
 from .base import TTSProvider
 
@@ -98,7 +98,7 @@ class MMSTTSProvider(TTSProvider):
             # stretching the finished audio). Takes vary by several percent, so keep the
             # shortest of a couple of tries.
             rate = speedup_for(
-                round(len(audio) / sample_rate * 1000), target_duration_ms, MAX_NATURAL_RATE
+                round(len(audio) / sample_rate * 1000), target_duration_ms, MAX_SPEEDUP
             )
             if rate > 1.0:
                 faster = min((take(rate) for _ in range(TAKES_AT_RATE)), key=len)

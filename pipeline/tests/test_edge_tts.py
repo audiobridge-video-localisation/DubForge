@@ -107,9 +107,21 @@ def test_synthesize_speaks_faster_when_the_take_is_too_long(
     provider = EdgeTTSProvider(output_dir=str(tmp_path))
     result = provider.synthesize("Hello there.", "hi", target_duration_ms=500)
 
-    assert FakeCommunicate.rates == ["+0%", "+30%"]  # capped at a natural speed-up
-    assert result.speech_rate == pytest.approx(1.3)
-    assert result.actual_duration_ms < 900  # about 1000 / 1.3
+    assert FakeCommunicate.rates == ["+0%", "+25%"]  # capped at MAX_SPEEDUP
+    assert result.speech_rate == pytest.approx(1.25)
+    assert result.actual_duration_ms < 900  # about 1000 / 1.25
+
+
+def test_synthesize_starts_at_tts_rate_and_speeds_up_on_top_of_it(
+    tmp_path: Path, mock_edge_tts: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TTS_RATE", "+20%")
+    provider = EdgeTTSProvider(output_dir=str(tmp_path))
+    result = provider.synthesize("Hello there.", "hi", target_duration_ms=500)
+
+    # 1.2x is the voice's normal pace; the speed-up for the long line multiplies it
+    assert FakeCommunicate.rates == ["+20%", "+50%"]
+    assert result.speech_rate == pytest.approx(1.25)  # measured from TTS_RATE, not natural
 
 
 def test_synthesize_empty_text_does_not_raise(tmp_path: Path, mock_edge_tts: None) -> None:
