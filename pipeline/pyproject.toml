@@ -30,6 +30,11 @@ tts-mms = [
 background = [
   "demucs>=4.1; sys_platform != 'darwin' or platform_machine != 'x86_64'",
 ]
+nllb-ct2 = [
+  "ctranslate2>=4.4",
+  "transformers>=5.19",
+  "sentencepiece>=0.2.2",
+]
 
 [project.scripts]
 dubforge-worker = "dubforge_pipeline.worker:run"
