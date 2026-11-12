@@ -13,8 +13,11 @@ from dubforge_pipeline.export_assembly import (
     VideoPiece,
     apply_tempo,
     build_dub_audio_track,
+    build_timeline_background,
     build_timeline_video,
+    dub_gain_db,
     encode_mp3,
+    mix_with_background,
     mux_mp4,
     plan_timeline,
     probe_duration_ms,
@@ -526,3 +529,101 @@ def test_build_dub_audio_track_real_keeps_each_clip_at_full_volume(tmp_path: Pat
 
     # with seven inputs, amix's default would drop every clip by about 17 dB
     assert peak_db(str(output)) >= peak_db(clips[0][1]) - 1
+
+
+def _tone(path: Path, seconds: float, frequency: int = 440, channels: int = 1) -> None:
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency={frequency}:sample_rate=44100:duration={seconds}",
+            "-ac",
+            str(channels),
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_build_timeline_background_real_follows_the_timeline(tmp_path: Path) -> None:
+    bed = tmp_path / "bed.wav"
+    _tone(bed, 3, frequency=220, channels=2)
+    # a second as is, a second slowed 1.25x and held 300ms, a tiny 20ms piece, the rest
+    pieces = [
+        VideoPiece(0, 1000),
+        VideoPiece(1000, 2000, 1.25, 300),
+        VideoPiece(2000, 2020),
+        VideoPiece(2020, 3000),
+    ]
+    output = tmp_path / "timed.wav"
+
+    build_timeline_background(str(bed), pieces, str(output))
+
+    assert abs(probe_duration_ms(str(output)) - sum(p.output_ms for p in pieces)) <= 15
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_mix_with_background_real_keeps_the_dub_length_in_stereo(tmp_path: Path) -> None:
+    dub = tmp_path / "dub.wav"
+    bed = tmp_path / "bed.wav"
+    _tone(dub, 2, frequency=880)
+    _tone(bed, 2, frequency=220, channels=2)
+    output = tmp_path / "mix.wav"
+
+    mix_with_background(str(dub), str(bed), str(output))
+
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=channels,sample_rate",
+            "-of",
+            "json",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    stream = json.loads(probe.stdout)["streams"][0]
+    assert stream["channels"] == 2
+    assert stream["sample_rate"] == "44100"
+    assert abs(probe_duration_ms(str(output)) - 2000) <= 30
+
+
+def _quiet_tone(path: Path, seconds: float, volume: float) -> None:
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency=440:sample_rate=16000:duration={seconds}",
+            "-af",
+            f"volume={volume}",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_dub_gain_db_real_matches_the_original_speaker(tmp_path: Path) -> None:
+    loud, quiet = tmp_path / "loud.wav", tmp_path / "quiet.wav"
+    _quiet_tone(loud, 1, 8.0)  # the sine source is -18 dBFS; this is about 0 dBFS
+    _quiet_tone(quiet, 1, 1.0)
+    # an 18 dB louder dub is turned down by about 18 dB to sit like the original voice
+    assert dub_gain_db(str(loud), str(quiet)) == pytest.approx(-18, abs=1)
+    # a much quieter dub is only turned up a little
+    assert dub_gain_db(str(quiet), str(loud)) == 6.0

@@ -34,9 +34,25 @@ ARG PIPELINE_EXTRAS=""
 ENV UV_HTTP_TIMEOUT=300 \
     UV_HTTP_RETRIES=10
 
+# The background extra needs sphn (via demucs), which ships no wheel for Linux on ARM
+# (e.g. Docker on Apple-silicon Macs): there it is compiled from Rust and C, with a
+# toolchain that is removed again in the same layer.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-install-workspace --package dubforge-pipeline \
-        $(for extra in $PIPELINE_EXTRAS; do printf -- '--extra %s ' "$extra"; done)
+    needs_toolchain=""; \
+    case " $PIPELINE_EXTRAS " in *" background "*) \
+        [ "$(uname -m)" = "aarch64" ] && needs_toolchain=1 ;; \
+    esac; \
+    if [ -n "$needs_toolchain" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends gcc g++ cmake make libc6-dev cargo; \
+        # its bundled Opus codec still declares a CMake version CMake 4 no longer accepts
+        export CMAKE_POLICY_VERSION_MINIMUM=3.5; \
+    fi \
+    && uv sync --locked --no-dev --no-install-workspace --package dubforge-pipeline \
+        $(for extra in $PIPELINE_EXTRAS; do printf -- '--extra %s ' "$extra"; done) \
+    && if [ -n "$needs_toolchain" ]; then \
+        apt-get purge -y --auto-remove gcc g++ cmake make libc6-dev cargo \
+        && rm -rf /var/lib/apt/lists/* /root/.cargo; \
+    fi
 
 # 2) Source code -> install workspace packages (fast, deps already cached)
 COPY packages/contracts/src packages/contracts/src

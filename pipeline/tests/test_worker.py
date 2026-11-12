@@ -402,6 +402,12 @@ def test_process_artifact_persists_audio_into_storage_dir(
 
 
 @pytest.fixture(autouse=True)
+def _no_background(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exports here carry the dub alone unless a test gives them a background."""
+    monkeypatch.setattr(worker, "separate_background", lambda _video: None)
+
+
+@pytest.fixture(autouse=True)
 def _no_silence_trimming(monkeypatch: pytest.MonkeyPatch) -> None:
     """The fake audio files in these tests are not real WAVs; exports use them as they are."""
 
@@ -989,3 +995,61 @@ def test_process_export_job_plans_with_the_trimmed_clip_length(
     assert calls[-1]["status"] == "completed"
     assert tempos == []  # it fits once trimmed, so no speed-up
     assert placed[0][1].endswith("segment_0_trim.wav")
+
+
+def test_process_export_job_lays_the_dub_over_the_video_background(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[Any] = []
+    _prepare_export_storage(tmp_path, "seg0.wav")
+    monkeypatch.setattr(worker, "probe_duration_ms", lambda *_a, **_k: 5000)
+    monkeypatch.setattr(worker, "build_dub_audio_track", lambda _s, _t, out: out)
+    monkeypatch.setattr(worker, "separate_background", lambda _video: "/media/bg.wav")
+    timed: list[Any] = []
+    monkeypatch.setattr(
+        worker,
+        "build_timeline_background",
+        lambda bg, pieces, out: timed.append((bg, pieces)) or out,
+    )
+    mixed: list[Any] = []
+    monkeypatch.setattr(
+        worker,
+        "mix_with_background",
+        lambda dub, bed, out, dub_gain_db=0.0: mixed.append((dub, bed, dub_gain_db)) or out,
+    )
+    encoded: list[str] = []
+    monkeypatch.setattr(worker, "encode_mp3", lambda wav, out: encoded.append(wav) or out)
+
+    segments = [_segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 1000)]
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
+
+    assert calls[-1]["status"] == "completed"
+    assert timed[0][0] == "/media/bg.wav"
+    assert mixed[0][0].endswith("dub_track.wav") and mixed[0][1].endswith("bed.wav")
+    assert mixed[0][2] == 0.0  # no separated voice to match: the dub keeps its level
+    assert encoded[0].endswith("soundtrack.wav")
+
+
+def test_process_export_job_keeps_the_dub_alone_when_mixing_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[Any] = []
+    _prepare_export_storage(tmp_path, "seg0.wav")
+    monkeypatch.setattr(worker, "probe_duration_ms", lambda *_a, **_k: 5000)
+    monkeypatch.setattr(worker, "build_dub_audio_track", lambda _s, _t, out: out)
+    monkeypatch.setattr(worker, "separate_background", lambda _video: "/media/bg.wav")
+
+    def _broken(*_a: object, **_k: object) -> str:
+        raise RuntimeError("ffmpeg failed")
+
+    monkeypatch.setattr(worker, "build_timeline_background", _broken)
+    encoded: list[str] = []
+    monkeypatch.setattr(worker, "encode_mp3", lambda wav, out: encoded.append(wav) or out)
+
+    segments = [_segment_with_audio_duration(0, 1000, "artifacts/seg0.wav", 1000)]
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(tmp_path), _export_message())
+
+    assert calls[-1]["status"] == "completed"
+    assert encoded[0].endswith("dub_track.wav")

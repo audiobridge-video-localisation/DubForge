@@ -17,6 +17,9 @@ dev = [
 
 [tool.uv]
 package = false
+# Intel Macs are left out of the lock: torch stopped shipping builds for them after 2.2,
+# so the model extras (and demucs) cannot resolve there anyway.
+environments = ["sys_platform != 'darwin' or platform_machine != 'x86_64'"]
 
 [tool.uv.workspace]
 members = [

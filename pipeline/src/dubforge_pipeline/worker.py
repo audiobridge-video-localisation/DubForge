@@ -28,13 +28,18 @@ from dubforge_contracts.models import (
 )
 from dubforge_pipeline.audio import extract_audio, fit_audio_duration, wav_duration_ms
 from dubforge_pipeline.auto_shorten import CANDIDATES_TO_SEARCH, shorter_alternatives
+from dubforge_pipeline.background import separate_background, voice_path
 from dubforge_pipeline.dub_fit import is_too_long
 from dubforge_pipeline.export_assembly import (
     MIN_TRIMMED_MS,
+    VideoPiece,
     apply_tempo,
     build_dub_audio_track,
+    build_timeline_background,
     build_timeline_video,
+    dub_gain_db,
     encode_mp3,
+    mix_with_background,
     mux_mp4,
     plan_timeline,
     probe_duration_ms,
@@ -438,6 +443,24 @@ def _trimmed_clip(
     return trimmed, trimmed_ms
 
 
+def _with_background(video_path: str, pieces: list[VideoPiece], dub_wav: str, tmp_dir: str) -> str:
+    """The dub over the video's own background sound, when that can be kept; otherwise
+    the dub alone. The background follows the same timeline as the picture."""
+    background = separate_background(video_path)
+    if background is None:
+        return dub_wav
+    try:
+        bed = build_timeline_background(background, pieces, str(Path(tmp_dir) / "bed.wav"))
+        original_voice = voice_path(video_path)
+        gain = dub_gain_db(dub_wav, str(original_voice)) if original_voice.exists() else 0.0
+        return mix_with_background(
+            dub_wav, bed, str(Path(tmp_dir) / "soundtrack.wav"), dub_gain_db=gain
+        )
+    except Exception:  # the dub alone is still a valid export
+        logger.warning("Could not mix the background under the dub", exc_info=True)
+        return dub_wav
+
+
 def _timeline_subtitles(segments: list[Segment], starts_and_ends: list[tuple[int, int]]) -> str:
     """SRT for the dubbed lines, timed to the export's timeline (not the source's)."""
     return segments_to_srt(
@@ -496,13 +519,14 @@ def process_export_job(
 
             dub_wav = str(Path(tmp_dir) / "dub_track.wav")
             build_dub_audio_track(segment_audio, timeline.duration_ms, dub_wav)
+            soundtrack = _with_background(video_path, timeline.pieces, dub_wav, tmp_dir)
             _report_export(client, api_base_url, export_job_id, JobStatus.PROCESSING, progress=50)
 
             exports_dir = Path(storage_root) / _EXPORTS_SUBDIR
             exports_dir.mkdir(parents=True, exist_ok=True)
             if message.kind == ExportKind.MP3:
                 output_path = exports_dir / f"{export_job_id}.mp3"
-                encode_mp3(dub_wav, str(output_path))
+                encode_mp3(soundtrack, str(output_path))
             else:
                 picture = video_path
                 if timeline.changes_video:
@@ -522,7 +546,7 @@ def process_export_job(
                 output_path = exports_dir / f"{export_job_id}.mp4"
                 mux_mp4(
                     picture,
-                    dub_wav,
+                    soundtrack,
                     str(output_path),
                     subtitles_path=str(subtitles),
                     subtitle_language=_SUBTITLE_LANGUAGE.get(_get_target_lang()),

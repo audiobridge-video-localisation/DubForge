@@ -296,6 +296,131 @@ def build_timeline_video(
     return output_path
 
 
+# atempo needs a minimum amount of input to work on; shorter background pieces are
+# only padded or cut to length (a few ms of slightly-off tempo is inaudible).
+MIN_ATEMPO_INPUT_MS = 50
+
+
+def build_timeline_background(
+    background_wav: str,
+    pieces: list[VideoPiece],
+    output_wav: str,
+    timeout_s: int = 900,
+) -> str:
+    """Re-time a separated background track to the export timeline, like the picture:
+    slowed pieces play slower (pitch kept) and frozen time is silent. Each piece is cut
+    to its exact length, so the bed cannot drift away from the video or the dub."""
+    if not pieces:
+        raise RuntimeError("the export timeline is empty")
+    parts: list[str] = []
+    labels: list[str] = []
+    for number, piece in enumerate(pieces):
+        source_ms = piece.source_end_ms - piece.source_start_ms
+        chain = (
+            f"atrim=start={piece.source_start_ms / 1000:.3f}:end={piece.source_end_ms / 1000:.3f},"
+            "asetpts=PTS-STARTPTS"
+        )
+        if piece.slowdown > 1.0 and source_ms >= MIN_ATEMPO_INPUT_MS:
+            chain += f",atempo={1 / piece.slowdown:.6f}"
+        chain += f",apad,atrim=duration={piece.output_ms / 1000:.3f}"
+        parts.append(f"[b{number}]{chain}[p{number}]")
+        labels.append(f"[p{number}]")
+    split = f"[0:a]asplit={len(pieces)}" + "".join(f"[b{n}]" for n in range(len(pieces)))
+    graph = ";".join([split, *parts, f"{''.join(labels)}concat=n={len(pieces)}:v=0:a=1[bed]"])
+    _run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            background_wav,
+            "-filter_complex",
+            graph,
+            "-map",
+            "[bed]",
+            output_wav,
+        ],
+        timeout_s,
+    )
+    if not Path(output_wav).exists():
+        raise RuntimeError("ffmpeg reported success but output file is missing")
+    return output_wav
+
+
+def speech_level_db(path: str, timeout_s: int = 300) -> float | None:
+    """Average loudness (dBFS) of the sounding parts of a track; the silence between
+    lines is left out, so a sparse and a dense track compare fairly. None if silent."""
+    result = _run(
+        [
+            "ffmpeg",
+            "-i",
+            path,
+            "-af",
+            f"silenceremove=stop_periods=-1:stop_threshold={SILENCE_THRESHOLD_DB}dB,volumedetect",
+            "-f",
+            "null",
+            "-",
+        ],
+        timeout_s,
+    )
+    for line in result.stderr.splitlines():
+        if "mean_volume:" in line:
+            level = float(line.split("mean_volume:")[1].split("dB")[0])
+            return None if math.isinf(level) or level < -90 else level
+    return None
+
+
+# How far the dub may be turned up or down to match the original speaker.
+MAX_DUB_BOOST_DB = 6.0
+MAX_DUB_CUT_DB = 18.0
+
+
+def dub_gain_db(dub_wav: str, original_voice_wav: str) -> float:
+    """Gain that brings the dub to the original speaker's loudness, so the dub sits in
+    the background the way the original voice did. 0 when either level is unknown."""
+    dub_level = speech_level_db(dub_wav)
+    voice_level = speech_level_db(original_voice_wav)
+    if dub_level is None or voice_level is None:
+        return 0.0
+    return max(-MAX_DUB_CUT_DB, min(voice_level - dub_level, MAX_DUB_BOOST_DB))
+
+
+def mix_with_background(
+    dub_wav: str,
+    background_wav: str,
+    output_wav: str,
+    dub_gain_db: float = 0.0,
+    timeout_s: int = 600,
+) -> str:
+    """Lay the dub over the background bed (both already on the export timeline). The dub
+    is turned up or down by `dub_gain_db`; the bed keeps its level. A limiter only
+    catches peaks where the two add up (no automatic levelling of the whole mix)."""
+    graph = (
+        f"[0:a]aresample=44100,aformat=channel_layouts=stereo,volume={dub_gain_db:.2f}dB[dub];"
+        "[1:a]aresample=44100,aformat=channel_layouts=stereo[bed];"
+        "[dub][bed]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
+        "alimiter=limit=0.95:level=disabled[mix]"
+    )
+    _run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            dub_wav,
+            "-i",
+            background_wav,
+            "-filter_complex",
+            graph,
+            "-map",
+            "[mix]",
+            output_wav,
+        ],
+        timeout_s,
+    )
+    if not Path(output_wav).exists():
+        raise RuntimeError("ffmpeg reported success but output file is missing")
+    return output_wav
+
+
 def probe_duration_ms(path: str, timeout_s: int = 60) -> int:
     """Return a media file's duration in milliseconds via ffprobe."""
     cmd = [
