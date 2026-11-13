@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dubforge_api.config import Settings, get_settings
 from dubforge_api.db import get_db
 from dubforge_api.models import Artifact as ArtifactModel
+from dubforge_api.models import Media as MediaModel
 from dubforge_api.models import Segment as SegmentModel
 from dubforge_api.redis_client import get_redis
 from dubforge_api.rooms import media_rooms
@@ -155,6 +156,10 @@ async def regenerate_segment(
             status_code=409, detail="Add a translation to this line before generating audio"
         )
 
+    media = await db.get(MediaModel, segment.media_id)
+    if media is None:
+        raise HTTPException(status_code=404, detail="Media not found")
+
     artifact = await _get_artifact_for_segment(segment_id, db)
     if artifact is None:
         artifact = ArtifactModel(segment_id=segment.id, status=ArtifactStatus.PENDING.value)
@@ -177,6 +182,7 @@ async def regenerate_segment(
         source_text=segment.text,
         may_rewrite=segment.translation_source != TranslationSource.EDITED.value,
         speaker_index=await _speaker_index(segment, db),
+        voice_gender=media.voice_gender,
     )
     await redis.rpush(ARTIFACT_QUEUE_KEY, message.model_dump_json())
 

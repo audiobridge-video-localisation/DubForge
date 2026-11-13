@@ -12,12 +12,14 @@ import {
   regenerateSegment,
   requestSegmentChanges,
   retryJob,
+  setVoiceGender,
   updateSegment,
   uploadMedia,
   type Artifact,
   type ExportJob,
   type ExportKind,
   type MediaWithJob,
+  type VoiceGender,
   type Project,
   type Segment,
   type SegmentUpdate,
@@ -315,6 +317,26 @@ export function ProjectDetailPage() {
     }
   }
 
+  async function handleVoiceGenderChange(
+    mediaId: string,
+    voiceGender: VoiceGender,
+  ) {
+    setDubbingError((current) => ({ ...current, [mediaId]: null }));
+    try {
+      const updatedMedia = await setVoiceGender(mediaId, voiceGender);
+      setMedia((current) =>
+        current.map((item) =>
+          item.media.id === mediaId ? { ...item, media: updatedMedia } : item,
+        ),
+      );
+    } catch (err) {
+      setDubbingError((current) => ({
+        ...current,
+        [mediaId]: (err as Error).message,
+      }));
+    }
+  }
+
   useDocumentTitle(
     project ? `${project.name} · DubForge` : "Project · DubForge",
   );
@@ -389,6 +411,7 @@ export function ProjectDetailPage() {
               batchRegenerateError={batchRegenerateError[item.media.id] ?? null}
               onRetry={handleRetry}
               onReadyForDubbing={handleReadyForDubbing}
+              onVoiceGenderChange={handleVoiceGenderChange}
               onRegenerateProblems={handleRegenerateProblemAudio}
               onExport={handleExport}
               onSave={(segmentId, patch) =>

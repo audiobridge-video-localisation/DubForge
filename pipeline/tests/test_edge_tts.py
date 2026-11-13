@@ -105,6 +105,27 @@ def test_resolve_voice_exact_override_ignores_speaker_index() -> None:
     assert _resolve_voice("hi-IN-SwaraNeural", speaker_index=1) == "hi-IN-SwaraNeural"
 
 
+def test_resolve_voice_gender_steers_the_first_speaker() -> None:
+    # Default order (no preference) puts the female voice first.
+    assert _resolve_voice("hi", speaker_index=0) == "hi-IN-SwaraNeural"
+    # Asking for male moves it to speaker_index=0 instead.
+    assert _resolve_voice("hi", speaker_index=0, voice_gender="male") == "hi-IN-MadhurNeural"
+    assert _resolve_voice("hi", speaker_index=0, voice_gender="female") == "hi-IN-SwaraNeural"
+
+
+def test_resolve_voice_gender_still_distinguishes_other_speakers() -> None:
+    # A second speaker still gets a different voice from the first, whichever gender
+    # was requested for the first - distinctness between speakers isn't lost.
+    first = _resolve_voice("hi", speaker_index=0, voice_gender="male")
+    second = _resolve_voice("hi", speaker_index=1, voice_gender="male")
+    assert first != second
+
+
+def test_resolve_voice_gender_ignored_without_speaker_index() -> None:
+    # No diarization info at all: voice_gender alone still works (index defaults to 0).
+    assert _resolve_voice("hi", voice_gender="male") == "hi-IN-MadhurNeural"
+
+
 def test_synthesize_produces_wav(tmp_path: Path, mock_edge_tts: None) -> None:
     provider = EdgeTTSProvider(output_dir=str(tmp_path))
     result = provider.synthesize("Hello there.", "hi")

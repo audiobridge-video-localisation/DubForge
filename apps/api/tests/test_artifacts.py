@@ -41,6 +41,32 @@ async def _seed_segment(client: AsyncClient) -> dict[str, Any]:
     return segment
 
 
+async def _seed_segment_with_media(client: AsyncClient) -> tuple[str, dict[str, Any]]:
+    """Like _seed_segment, but also returns the media_id (not on the Segment contract)."""
+    media_with_job = await _upload(client)
+    media_id = media_with_job["media"]["id"]
+    project_id = media_with_job["media"]["project_id"]
+
+    await client.put(
+        f"/internal/media/{media_id}/segments",
+        json=[
+            {
+                "index": 0,
+                "start_ms": 0,
+                "end_ms": 1000,
+                "duration_ms": 1000,
+                "speaker_label": "Speaker 0",
+                "text": "Hello",
+                "translated_text": "[es] Hello",
+            }
+        ],
+    )
+
+    detail = (await client.get(f"/projects/{project_id}")).json()
+    segment: dict[str, Any] = detail["media"][0]["segments"][0]
+    return media_id, segment
+
+
 async def _seed_segments_with_speakers(
     client: AsyncClient, speaker_labels: list[str]
 ) -> list[dict[str, Any]]:
@@ -125,6 +151,41 @@ async def test_regenerate_assigns_speaker_index_by_first_appearance(
     by_segment_id = {q["segment_id"]: q for q in queued}
     for segment, expected_index in zip(segments, [0, 1, 0, 1], strict=True):
         assert by_segment_id[segment["id"]]["speaker_index"] == expected_index
+
+
+async def test_set_voice_gender_persists_and_rejects_invalid_values(client: AsyncClient) -> None:
+    media_id, _segment = await _seed_segment_with_media(client)
+
+    response = await client.put(f"/media/{media_id}/voice-gender", json={"voice_gender": "male"})
+    assert response.status_code == 200
+    assert response.json()["voice_gender"] == "male"
+
+    response = await client.put(f"/media/{media_id}/voice-gender", json={"voice_gender": "loud"})
+    assert response.status_code == 422
+
+    # null clears the preference back to the provider's default order.
+    response = await client.put(f"/media/{media_id}/voice-gender", json={"voice_gender": None})
+    assert response.status_code == 200
+    assert response.json()["voice_gender"] is None
+
+
+async def test_set_voice_gender_not_found(client: AsyncClient) -> None:
+    response = await client.put(
+        f"/media/{uuid.uuid4()}/voice-gender", json={"voice_gender": "male"}
+    )
+    assert response.status_code == 404
+
+
+async def test_regenerate_carries_the_media_voice_gender_preference(
+    client: AsyncClient, fake_redis: FakeRedis
+) -> None:
+    media_id, segment = await _seed_segment_with_media(client)
+    await client.put(f"/media/{media_id}/voice-gender", json={"voice_gender": "male"})
+
+    await client.post(f"/segments/{segment['id']}/regenerate")
+
+    queued = [json.loads(value) for key, value in fake_redis.calls if key == "dubforge:artifacts"]
+    assert queued[-1]["voice_gender"] == "male"
 
 
 async def test_regenerate_not_found(client: AsyncClient) -> None:

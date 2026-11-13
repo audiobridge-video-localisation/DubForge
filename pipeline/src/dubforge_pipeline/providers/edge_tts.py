@@ -30,20 +30,23 @@ from .base import TTSProvider
 
 logger = logging.getLogger(__name__)
 
-# Each language maps to a small pool of voices rather than one fixed voice, so distinct
-# diarized speakers in the same media can be given distinct voices (see speaker_index below).
-# Alternates male/female so a two-speaker conversation sounds like two different people.
-_VOICE_POOL_BY_LANGUAGE = {
-    "hi": ["hi-IN-SwaraNeural", "hi-IN-MadhurNeural"],
-    "bn": ["bn-IN-TanishaaNeural", "bn-IN-BashkarNeural"],
+# Each language maps to a small pool of (voice, gender) rather than one fixed voice, so
+# distinct diarized speakers in the same media can be given distinct voices (speaker_index
+# below), and the dominant/first speaker's gender can be steered by voice_gender.
+_VOICE_POOL_BY_LANGUAGE: dict[str, list[tuple[str, str]]] = {
+    "hi": [("hi-IN-SwaraNeural", "female"), ("hi-IN-MadhurNeural", "male")],
+    "bn": [("bn-IN-TanishaaNeural", "female"), ("bn-IN-BashkarNeural", "male")],
 }
-_ALL_VOICES = {voice for pool in _VOICE_POOL_BY_LANGUAGE.values() for voice in pool}
+_ALL_VOICES = {voice for pool in _VOICE_POOL_BY_LANGUAGE.values() for voice, _gender in pool}
 
 
-def _resolve_voice(voice_profile: str, speaker_index: int | None = None) -> str:
+def _resolve_voice(
+    voice_profile: str, speaker_index: int | None = None, voice_gender: str | None = None
+) -> str:
     # voice_profile is normally a language code (e.g. "hi"), mapped to a voice from that
     # language's pool. Passing an exact edge-tts voice name directly (e.g.
-    # "hi-IN-SwaraNeural") overrides the language mapping and speaker_index entirely.
+    # "hi-IN-SwaraNeural") overrides the language mapping, speaker_index, and voice_gender
+    # entirely.
     if voice_profile in _ALL_VOICES:
         return voice_profile
     try:
@@ -53,10 +56,15 @@ def _resolve_voice(voice_profile: str, speaker_index: int | None = None) -> str:
         raise ValueError(
             f"Unsupported language/voice '{voice_profile}'; valid language codes: {valid_options}"
         ) from None
+    if voice_gender is not None:
+        # Put the requested gender's voice(s) first (stable sort keeps their relative
+        # order), so speaker_index=0 - the dominant/first speaker - gets that gender, while
+        # other speakers still land on a different voice from the rest of the pool.
+        pool = sorted(pool, key=lambda item: item[1] != voice_gender)
     # No speaker info (e.g. an explicit test/override call): keep the previous,
     # single-voice behaviour by always using the pool's first voice.
     index = speaker_index if speaker_index is not None else 0
-    return pool[index % len(pool)]
+    return pool[index % len(pool)][0]
 
 
 _DEFAULT_RATE = "+0%"
@@ -176,8 +184,9 @@ class EdgeTTSProvider(TTSProvider):
         voice_profile: str,
         target_duration_ms: int | None = None,
         speaker_index: int | None = None,
+        voice_gender: str | None = None,
     ) -> AudioResult:
-        voice = _resolve_voice(voice_profile, speaker_index)
+        voice = _resolve_voice(voice_profile, speaker_index, voice_gender)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_wav_path = Path(tmp_dir) / "speech.wav"

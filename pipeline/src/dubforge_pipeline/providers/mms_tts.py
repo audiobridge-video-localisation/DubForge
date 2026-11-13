@@ -70,8 +70,9 @@ class MMSTTSProvider(TTSProvider):
         voice_profile: str,
         target_duration_ms: int | None = None,
         speaker_index: int | None = None,
+        voice_gender: str | None = None,
     ) -> AudioResult:
-        # MMS has one model/voice per language; no pool to pick speaker_index from.
+        # MMS has one model/voice per language; no pool to pick speaker_index/voice_gender from.
         model_id = _resolve_model_id(voice_profile)
         tokenizer, model = self._load(model_id)
 
