@@ -4,6 +4,13 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# Target languages the pipeline can actually translate/dub into today. Kept here (rather
+# than in the api or pipeline package) since both sides need to agree on what's valid: the
+# api validates an upload's target_lang against this before queuing a job, and the pipeline's
+# own per-language maps (NLLB lang codes, TTS voice pools) are expected to cover the same set.
+SUPPORTED_TARGET_LANGS: tuple[str, ...] = ("hi", "bn")
+DEFAULT_TARGET_LANG = "hi"
+
 
 class TranscriptSegment(BaseModel):
     start_ms: int
@@ -98,6 +105,7 @@ class MediaRead(BaseModel):
     storage_path: str
     created_at: datetime
     ready_for_dubbing: bool = False
+    target_lang: str = DEFAULT_TARGET_LANG
 
 
 class JobRead(BaseModel):
@@ -119,6 +127,10 @@ class JobQueueMessage(BaseModel):
     job_id: uuid.UUID
     media_id: uuid.UUID
     storage_path: str
+    # The language chosen for this media at upload time. Defaulted rather than optional:
+    # every job needs a translation target, and this keeps older messages (from before this
+    # field existed) loadable without a migration of in-flight queue data.
+    target_lang: str = DEFAULT_TARGET_LANG
 
 
 class JobCallbackUpdate(BaseModel):
@@ -258,6 +270,9 @@ class ArtifactQueueMessage(BaseModel):
     # when the dub still does not fit. False once a person has edited the translation.
     source_text: str | None = None
     may_rewrite: bool = False
+    # The media's target language, copied in at regenerate time so the voice matches what
+    # the line was actually translated into.
+    target_lang: str = DEFAULT_TARGET_LANG
 
 
 class ArtifactCallbackUpdate(BaseModel):
@@ -300,6 +315,7 @@ class ExportJobQueueMessage(BaseModel):
     media_id: uuid.UUID
     kind: ExportKind
     media_storage_path: str
+    target_lang: str = DEFAULT_TARGET_LANG
 
 
 class ExportJobCallbackUpdate(BaseModel):

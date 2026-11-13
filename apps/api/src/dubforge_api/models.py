@@ -36,6 +36,7 @@ class Media(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     ready_for_dubbing: Mapped[bool] = mapped_column(nullable=False, default=False)
+    target_lang: Mapped[str] = mapped_column(String(10), nullable=False, default="hi")
 
     project: Mapped[Project] = relationship(back_populates="media")
     job: Mapped["Job | None"] = relationship(back_populates="media", uselist=False)
