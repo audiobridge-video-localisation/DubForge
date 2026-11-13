@@ -46,9 +46,7 @@ async def upload_media(
 
     if target_lang not in SUPPORTED_TARGET_LANGS:
         valid_options = ", ".join(SUPPORTED_TARGET_LANGS)
-        raise HTTPException(
-            status_code=422, detail=f"target_lang must be one of: {valid_options}"
-        )
+        raise HTTPException(status_code=422, detail=f"target_lang must be one of: {valid_options}")
 
     safe_name = Path(file.filename or "upload").name
     relative_path = f"{project_id}/{uuid.uuid4()}_{safe_name}"
