@@ -65,8 +65,13 @@ class MMSTTSProvider(TTSProvider):
         return self._tokenizers[model_id], self._models[model_id]
 
     def synthesize(
-        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+        self,
+        text: str,
+        voice_profile: str,
+        target_duration_ms: int | None = None,
+        speaker_index: int | None = None,
     ) -> AudioResult:
+        # MMS has one model/voice per language; no pool to pick speaker_index from.
         model_id = _resolve_model_id(voice_profile)
         tokenizer, model = self._load(model_id)
 

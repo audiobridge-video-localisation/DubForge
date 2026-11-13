@@ -258,6 +258,10 @@ class ArtifactQueueMessage(BaseModel):
     # when the dub still does not fit. False once a person has edited the translation.
     source_text: str | None = None
     may_rewrite: bool = False
+    # Position of this segment's speaker among the media's distinct speakers, ordered by
+    # first appearance (0, 1, 2, ...). Lets the TTS provider pick a different voice per
+    # speaker from its per-language pool. None = use the pool's default voice.
+    speaker_index: int | None = None
 
 
 class ArtifactCallbackUpdate(BaseModel):

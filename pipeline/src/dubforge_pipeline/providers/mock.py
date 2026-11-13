@@ -32,7 +32,11 @@ class MockTranslationProvider(TranslationProvider):
 
 class MockTTSProvider(TTSProvider):
     def synthesize(
-        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+        self,
+        text: str,
+        voice_profile: str,
+        target_duration_ms: int | None = None,
+        speaker_index: int | None = None,
     ) -> AudioResult:
         actual_duration_ms = target_duration_ms if target_duration_ms is not None else 2000
         audio_path = self._write_silent_wav(actual_duration_ms)

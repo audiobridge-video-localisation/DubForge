@@ -82,6 +82,29 @@ def test_resolve_voice_unsupported_raises_value_error() -> None:
         _resolve_voice("fr")
 
 
+def test_resolve_voice_picks_a_different_voice_per_speaker_index() -> None:
+    first = _resolve_voice("hi", speaker_index=0)
+    second = _resolve_voice("hi", speaker_index=1)
+    assert first == "hi-IN-SwaraNeural"
+    assert second != first
+
+
+def test_resolve_voice_wraps_around_the_pool_for_extra_speakers() -> None:
+    # More distinct speakers than voices in the pool: wrap back to voice 0, not an error.
+    assert _resolve_voice("hi", speaker_index=2) == _resolve_voice("hi", speaker_index=0)
+
+
+def test_resolve_voice_without_speaker_index_keeps_the_default_voice() -> None:
+    # Callers that only pass a language (no diarization info, e.g. tests/manual overrides)
+    # keep getting the same voice as before this pool existed.
+    assert _resolve_voice("hi") == "hi-IN-SwaraNeural"
+    assert _resolve_voice("hi", speaker_index=None) == "hi-IN-SwaraNeural"
+
+
+def test_resolve_voice_exact_override_ignores_speaker_index() -> None:
+    assert _resolve_voice("hi-IN-SwaraNeural", speaker_index=1) == "hi-IN-SwaraNeural"
+
+
 def test_synthesize_produces_wav(tmp_path: Path, mock_edge_tts: None) -> None:
     provider = EdgeTTSProvider(output_dir=str(tmp_path))
     result = provider.synthesize("Hello there.", "hi")

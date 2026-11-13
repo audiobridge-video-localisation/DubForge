@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import Any
 
@@ -40,6 +41,36 @@ async def _seed_segment(client: AsyncClient) -> dict[str, Any]:
     return segment
 
 
+async def _seed_segments_with_speakers(
+    client: AsyncClient, speaker_labels: list[str]
+) -> list[dict[str, Any]]:
+    """Several segments on one media, each labelled with the given speaker, in order -
+    so diarized speaker order is: first appearance of each distinct label in this list."""
+    media_with_job = await _upload(client)
+    media_id = media_with_job["media"]["id"]
+    project_id = media_with_job["media"]["project_id"]
+
+    await client.put(
+        f"/internal/media/{media_id}/segments",
+        json=[
+            {
+                "index": i,
+                "start_ms": i * 1000,
+                "end_ms": i * 1000 + 1000,
+                "duration_ms": 1000,
+                "speaker_label": label,
+                "text": f"Line {i}",
+                "translated_text": f"[es] Line {i}",
+            }
+            for i, label in enumerate(speaker_labels)
+        ],
+    )
+
+    detail = (await client.get(f"/projects/{project_id}")).json()
+    segments: list[dict[str, Any]] = detail["media"][0]["segments"]
+    return segments
+
+
 async def test_regenerate_creates_artifact_and_queues_message(
     client: AsyncClient, fake_redis: FakeRedis
 ) -> None:
@@ -75,6 +106,25 @@ async def test_regenerate_again_resets_and_increments_retry_count(
     assert body["retry_count"] == 1
     artifact_calls = [c for c in fake_redis.calls if c[0] == "dubforge:artifacts"]
     assert len(artifact_calls) == 2
+
+
+async def test_regenerate_assigns_speaker_index_by_first_appearance(
+    client: AsyncClient, fake_redis: FakeRedis
+) -> None:
+    """Two speakers alternating lines: each line's queued message should carry the
+    index of ITS speaker among the media's distinct speakers (by first appearance),
+    so the TTS provider gives the two speakers two different voices, not the same one."""
+    segments = await _seed_segments_with_speakers(
+        client, ["Speaker 0", "Speaker 1", "Speaker 0", "Speaker 1"]
+    )
+
+    for segment in segments:
+        await client.post(f"/segments/{segment['id']}/regenerate")
+
+    queued = [json.loads(value) for key, value in fake_redis.calls if key == "dubforge:artifacts"]
+    by_segment_id = {q["segment_id"]: q for q in queued}
+    for segment, expected_index in zip(segments, [0, 1, 0, 1], strict=True):
+        assert by_segment_id[segment["id"]]["speaker_index"] == expected_index
 
 
 async def test_regenerate_not_found(client: AsyncClient) -> None:

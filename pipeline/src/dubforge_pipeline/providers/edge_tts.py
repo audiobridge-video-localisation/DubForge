@@ -30,25 +30,33 @@ from .base import TTSProvider
 
 logger = logging.getLogger(__name__)
 
-_VOICE_BY_LANGUAGE = {
-    "hi": "hi-IN-SwaraNeural",
-    "bn": "bn-IN-TanishaaNeural",
+# Each language maps to a small pool of voices rather than one fixed voice, so distinct
+# diarized speakers in the same media can be given distinct voices (see speaker_index below).
+# Alternates male/female so a two-speaker conversation sounds like two different people.
+_VOICE_POOL_BY_LANGUAGE = {
+    "hi": ["hi-IN-SwaraNeural", "hi-IN-MadhurNeural"],
+    "bn": ["bn-IN-TanishaaNeural", "bn-IN-BashkarNeural"],
 }
+_ALL_VOICES = {voice for pool in _VOICE_POOL_BY_LANGUAGE.values() for voice in pool}
 
 
-def _resolve_voice(voice_profile: str) -> str:
-    # voice_profile is normally a language code (e.g. "hi"), mapped to a
-    # fixed edge-tts voice. Passing an exact edge-tts voice name directly
-    # (e.g. "hi-IN-SwaraNeural") overrides the language mapping.
-    if voice_profile in _VOICE_BY_LANGUAGE.values():
+def _resolve_voice(voice_profile: str, speaker_index: int | None = None) -> str:
+    # voice_profile is normally a language code (e.g. "hi"), mapped to a voice from that
+    # language's pool. Passing an exact edge-tts voice name directly (e.g.
+    # "hi-IN-SwaraNeural") overrides the language mapping and speaker_index entirely.
+    if voice_profile in _ALL_VOICES:
         return voice_profile
     try:
-        return _VOICE_BY_LANGUAGE[voice_profile]
+        pool = _VOICE_POOL_BY_LANGUAGE[voice_profile]
     except KeyError:
-        valid_options = ", ".join(sorted(_VOICE_BY_LANGUAGE))
+        valid_options = ", ".join(sorted(_VOICE_POOL_BY_LANGUAGE))
         raise ValueError(
             f"Unsupported language/voice '{voice_profile}'; valid language codes: {valid_options}"
         ) from None
+    # No speaker info (e.g. an explicit test/override call): keep the previous,
+    # single-voice behaviour by always using the pool's first voice.
+    index = speaker_index if speaker_index is not None else 0
+    return pool[index % len(pool)]
 
 
 _DEFAULT_RATE = "+0%"
@@ -163,9 +171,13 @@ class EdgeTTSProvider(TTSProvider):
         self.rate = _validate_rate(rate or os.environ.get("TTS_RATE") or _DEFAULT_RATE)
 
     def synthesize(
-        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+        self,
+        text: str,
+        voice_profile: str,
+        target_duration_ms: int | None = None,
+        speaker_index: int | None = None,
     ) -> AudioResult:
-        voice = _resolve_voice(voice_profile)
+        voice = _resolve_voice(voice_profile, speaker_index)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_wav_path = Path(tmp_dir) / "speech.wav"

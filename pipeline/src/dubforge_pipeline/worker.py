@@ -289,7 +289,10 @@ def _synthesize_take(
     text: str, message: ArtifactQueueMessage, voice_profile: str, storage_root: str
 ) -> _Take:
     result = _get_tts_provider().synthesize(
-        text, voice_profile=voice_profile, target_duration_ms=message.target_duration_ms
+        text,
+        voice_profile=voice_profile,
+        target_duration_ms=message.target_duration_ms,
+        speaker_index=message.speaker_index,
     )
     # judge (and learn from) the speech itself, not the silence voices add around it
     audio_path, duration_ms = _trim_take(result.audio_path, result.actual_duration_ms)
