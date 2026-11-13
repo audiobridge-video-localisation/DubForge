@@ -132,21 +132,6 @@ def reset_provider_cache() -> None:
     _tts_provider_cache = None
 
 
-def _get_target_lang() -> str:
-    raw = os.environ.get("TARGET_LANGS", "hi")
-    langs = [lang.strip() for lang in raw.split(",") if lang.strip()]
-    if not langs:
-        langs = ["hi"]
-    if len(langs) > 1:
-        logger.warning(
-            "TARGET_LANGS=%s configures multiple languages, but each segment stores a "
-            "single translated_text; only using the first language: %s",
-            raw,
-            langs[0],
-        )
-    return langs[0]
-
-
 def _persist_artifact_audio(audio_path: str, storage_root: str, artifact_id: str) -> str:
     """Move a TTS provider's output into the shared storage volume so the
     api process (and later, export assembly) can find it after this
@@ -236,7 +221,7 @@ def process_job(
 
         segments = combine_segments(merged_transcripts, speakers)
         src_lang = os.environ.get("SOURCE_LANG", "en")
-        tgt_lang = _get_target_lang()
+        tgt_lang = message.target_lang
         segments = translate_segments(
             segments,
             _get_translator(),
@@ -368,7 +353,7 @@ def process_artifact(
         return
 
     try:
-        voice_profile = _get_target_lang()
+        voice_profile = message.target_lang
         take = _synthesize_take(message.text, message, voice_profile, storage_root)
         if (
             message.may_rewrite
@@ -557,7 +542,7 @@ def process_export_job(
                     soundtrack,
                     str(output_path),
                     subtitles_path=str(subtitles),
-                    subtitle_language=_SUBTITLE_LANGUAGE.get(_get_target_lang()),
+                    subtitle_language=_SUBTITLE_LANGUAGE.get(message.target_lang),
                 )
             _report_export(client, api_base_url, export_job_id, JobStatus.PROCESSING, progress=90)
     except Exception as exc:  # defensive: never let a bad export job crash the worker loop

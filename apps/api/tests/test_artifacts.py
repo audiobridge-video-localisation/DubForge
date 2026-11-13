@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import Any
 
@@ -5,18 +6,19 @@ from conftest import FakeRedis
 from httpx import AsyncClient
 
 
-async def _upload(client: AsyncClient) -> dict[str, Any]:
+async def _upload(client: AsyncClient, target_lang: str | None = None) -> dict[str, Any]:
     project = (await client.post("/projects", json={"name": "Artifact Target"})).json()
     response = await client.post(
         f"/projects/{project['id']}/media",
         files={"file": ("clip.mp4", b"bytes", "video/mp4")},
+        data={"target_lang": target_lang} if target_lang else None,
     )
     result: dict[str, Any] = response.json()
     return result
 
 
-async def _seed_segment(client: AsyncClient) -> dict[str, Any]:
-    media_with_job = await _upload(client)
+async def _seed_segment(client: AsyncClient, target_lang: str | None = None) -> dict[str, Any]:
+    media_with_job = await _upload(client, target_lang)
     media_id = media_with_job["media"]["id"]
     project_id = media_with_job["media"]["project_id"]
 
@@ -53,6 +55,19 @@ async def test_regenerate_creates_artifact_and_queues_message(
     assert body["retry_count"] == 0
     artifact_calls = [c for c in fake_redis.calls if c[0] == "dubforge:artifacts"]
     assert len(artifact_calls) == 1
+
+
+async def test_regenerate_copies_the_media_target_lang_onto_the_queued_message(
+    client: AsyncClient, fake_redis: FakeRedis
+) -> None:
+    segment = await _seed_segment(client, target_lang="bn")
+
+    response = await client.post(f"/segments/{segment['id']}/regenerate")
+
+    assert response.status_code == 200
+    artifact_calls = [c for c in fake_redis.calls if c[0] == "dubforge:artifacts"]
+    queued = json.loads(artifact_calls[-1][1])
+    assert queued["target_lang"] == "bn"
 
 
 async def test_regenerate_again_resets_and_increments_retry_count(

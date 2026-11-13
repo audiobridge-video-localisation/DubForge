@@ -111,7 +111,6 @@ services:
       TRANSLATION_PROVIDER: ${TRANSLATION_PROVIDER:-mock}
       TTS_PROVIDER: ${TTS_PROVIDER:-mock}
       TTS_RATE: ${TTS_RATE:-+0%}
-      TARGET_LANGS: ${TARGET_LANGS:-hi}
       MIN_SEGMENT_MS: ${MIN_SEGMENT_MS:-500}
     volumes:
       - media-data:/app/data

@@ -1,5 +1,4 @@
 import json
-import logging
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -117,7 +116,7 @@ def test_process_job_submits_segments(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert len(segment_calls) == 1
     assert segment_calls[0][0]["text"] == "Hi"
     assert segment_calls[0][0]["speaker_label"] == "A"
-    # Default TARGET_LANGS is "hi" (was hardcoded "es" before real
+    # JobQueueMessage.target_lang defaults to "hi" (was hardcoded "es" before real
     # translation providers were wired in).
     assert segment_calls[0][0]["translated_text"] == "[hi] Hi"
 
@@ -239,23 +238,6 @@ def test_tts_provider_cached_across_two_artifacts(
     assert call_count == 1
 
 
-def test_get_target_lang_default_is_hi(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("TARGET_LANGS", raising=False)
-    assert worker._get_target_lang() == "hi"
-
-
-def test_get_target_lang_uses_first_of_many_and_warns(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    monkeypatch.setenv("TARGET_LANGS", "hi,bn,ta")
-    with caplog.at_level(logging.WARNING, logger="dubforge_pipeline.worker"):
-        result = worker._get_target_lang()
-
-    assert result == "hi"
-    assert "TARGET_LANGS" in caplog.text
-    assert "hi" in caplog.text
-
-
 def test_process_artifact_reports_progress_and_completion(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -335,9 +317,10 @@ def test_process_artifact_uses_target_lang_as_voice_profile(
             return AudioResult(audio_path=str(source_path), actual_duration_ms=2000)
 
     monkeypatch.setattr(worker, "_get_tts_provider", lambda: _RecordingTTSProvider())
-    monkeypatch.setenv("TARGET_LANGS", "bn")
 
-    message = ArtifactQueueMessage(artifact_id=uuid.uuid4(), segment_id=uuid.uuid4(), text="Hola")
+    message = ArtifactQueueMessage(
+        artifact_id=uuid.uuid4(), segment_id=uuid.uuid4(), text="Hola", target_lang="bn"
+    )
     with _client_recording(calls) as client:
         worker.process_artifact(client, "http://api", str(tmp_path), message)
 
@@ -557,6 +540,48 @@ def test_process_export_job_mp4_dispatches_to_mux(
     video, _wav, _out, kwargs = mux_calls[0]
     assert video == str(storage_root / "proj" / "video.mp4")  # the original, untouched
     assert kwargs["subtitles_path"].endswith("dub.srt")
+    # default target_lang is "hi"
+    assert kwargs["subtitle_language"] == "hin"
+
+
+def test_process_export_job_mp4_uses_the_media_target_lang_for_subtitles(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[Any] = []
+    storage_root = tmp_path
+    audio_path = storage_root / "artifacts" / "seg0.wav"
+    audio_path.parent.mkdir(parents=True)
+    audio_path.write_bytes(b"fake")
+    (storage_root / "proj").mkdir()
+    (storage_root / "proj" / "video.mp4").write_bytes(b"fake video")
+
+    monkeypatch.setattr(worker, "probe_duration_ms", lambda *_a, **_k: 5000)
+    monkeypatch.setattr(
+        worker, "build_dub_audio_track", lambda _segs, _total_ms, output_wav_path: output_wav_path
+    )
+    monkeypatch.setattr(worker, "build_timeline_video", lambda *_a, **_k: None)
+
+    mux_calls: list[Any] = []
+
+    def fake_mux(video: str, wav: str, out: str, **kwargs: Any) -> str:
+        mux_calls.append((video, wav, out, kwargs))
+        return out
+
+    monkeypatch.setattr(worker, "mux_mp4", fake_mux)
+
+    message = ExportJobQueueMessage(
+        export_job_id=uuid.uuid4(),
+        media_id=uuid.uuid4(),
+        kind=ExportKind.MP4,
+        media_storage_path="proj/video.mp4",
+        target_lang="bn",
+    )
+    segments = [_segment_with_artifact(0, "artifacts/seg0.wav")]
+    with _client_with_segments(segments, calls) as client:
+        worker.process_export_job(client, "http://api", str(storage_root), message)
+
+    assert calls[-1]["status"] == "completed"
+    assert mux_calls[0][3]["subtitle_language"] == "ben"
 
 
 def test_process_export_job_fails_when_segment_has_no_artifact(

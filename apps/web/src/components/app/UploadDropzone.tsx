@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { UploadOptions } from "../../api/client";
+import type { TargetLang, UploadOptions } from "../../api/client";
 import {
   MAX_UPLOAD_BYTES,
   describeSelection,
@@ -22,6 +22,7 @@ export function UploadDropzone({
   onUpload: (file: File, options: UploadOptions) => Promise<void>;
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const [targetLang, setTargetLang] = useState<TargetLang>("hi");
   const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
@@ -60,6 +61,7 @@ export function UploadDropzone({
     try {
       await onUpload(file, {
         signal: controller.signal,
+        targetLang,
         onProgress: (percent) =>
           setPhase((now) =>
             now.kind === "uploading" ? { ...now, percent } : now,
@@ -151,6 +153,16 @@ export function UploadDropzone({
                 {phase.note}
               </p>
             )}
+            <label className="dz-lang">
+              Dub into:{" "}
+              <select
+                value={targetLang}
+                onChange={(e) => setTargetLang(e.target.value as TargetLang)}
+              >
+                <option value="hi">Hindi</option>
+                <option value="bn">Bengali</option>
+              </select>
+            </label>
             <div className="dz-actions">
               <button
                 type="button"

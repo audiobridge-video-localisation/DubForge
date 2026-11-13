@@ -27,6 +27,11 @@ const JOB_TONE: Record<string, Tone> = {
   failed: "danger",
 };
 
+const TARGET_LANG_LABEL: Record<string, string> = {
+  hi: "Hindi",
+  bn: "Bengali",
+};
+
 export interface MediaPanelProps extends SegmentHandlers {
   item: MediaWithJob;
   exportJobs: Partial<Record<ExportKind, ExportJob>>;
@@ -143,7 +148,10 @@ export function MediaPanel({
       <header className="media-head">
         <div>
           <h2 title={media.filename}>{media.filename}</h2>
-          <p>Uploaded {relativeTime(new Date(media.created_at))}</p>
+          <p>
+            Uploaded {relativeTime(new Date(media.created_at))} · Dubbing into{" "}
+            {TARGET_LANG_LABEL[media.target_lang] ?? media.target_lang}
+          </p>
         </div>
         <StatusBadge
           tone={JOB_TONE[job.status] ?? "neutral"}

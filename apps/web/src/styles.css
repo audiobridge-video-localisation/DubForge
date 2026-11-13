@@ -948,6 +948,21 @@ a {
   color: #8a5a12;
   font-size: 13px;
 }
+.app .dz-lang {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--a-muted);
+  flex-basis: 100%;
+}
+.app .dz-lang select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--a-line);
+  background: var(--a-soft);
+  font-size: 13px;
+}
 
 /* dub player */
 .app .player {
