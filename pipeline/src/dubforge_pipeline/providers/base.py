@@ -33,5 +33,14 @@ class TranslationProvider(ABC):
 class TTSProvider(ABC):
     @abstractmethod
     def synthesize(
-        self, text: str, voice_profile: str, target_duration_ms: int | None = None
-    ) -> AudioResult: ...
+        self,
+        text: str,
+        voice_profile: str,
+        target_duration_ms: int | None = None,
+        speaker_index: int | None = None,
+        voice_gender: str | None = None,
+    ) -> AudioResult:
+        """speaker_index distinguishes diarized speakers in the same media (e.g. picking a
+        different voice from a per-language pool). voice_gender ("male"/"female") steers
+        which gender the dominant/first speaker (speaker_index 0) gets. Providers that only
+        support one voice per language (mock, MMS) accept and ignore both."""

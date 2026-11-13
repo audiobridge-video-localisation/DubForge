@@ -30,14 +30,24 @@ class _FakeTTSProvider(TTSProvider):
         self._source_path = source_path
 
     def synthesize(
-        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+        self,
+        text: str,
+        voice_profile: str,
+        target_duration_ms: int | None = None,
+        speaker_index: int | None = None,
+        voice_gender: str | None = None,
     ) -> AudioResult:
         return AudioResult(audio_path=self._source_path, actual_duration_ms=2000)
 
 
 class _RaisingTTSProvider(TTSProvider):
     def synthesize(
-        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+        self,
+        text: str,
+        voice_profile: str,
+        target_duration_ms: int | None = None,
+        speaker_index: int | None = None,
+        voice_gender: str | None = None,
     ) -> AudioResult:
         raise RuntimeError("tts exploded")
 
@@ -329,7 +339,12 @@ def test_process_artifact_uses_target_lang_as_voice_profile(
 
     class _RecordingTTSProvider(TTSProvider):
         def synthesize(
-            self, text: str, voice_profile: str, target_duration_ms: int | None = None
+            self,
+            text: str,
+            voice_profile: str,
+            target_duration_ms: int | None = None,
+            speaker_index: int | None = None,
+            voice_gender: str | None = None,
         ) -> AudioResult:
             received_voice_profiles.append(voice_profile)
             return AudioResult(audio_path=str(source_path), actual_duration_ms=2000)
@@ -345,6 +360,75 @@ def test_process_artifact_uses_target_lang_as_voice_profile(
     assert calls[-1]["voice_profile"] == "bn"
 
 
+def test_process_artifact_passes_speaker_index_through_to_the_provider(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The API computes which distinct speaker this segment is (speaker_index); the
+    worker must hand that straight to the TTS provider so it can pick a matching voice
+    from its per-language pool, instead of every speaker getting the same voice."""
+    calls: list[Any] = []
+    received_speaker_indexes: list[int | None] = []
+    source_path = tmp_path / "speech.wav"
+    source_path.write_bytes(b"fake wav bytes")
+
+    class _RecordingTTSProvider(TTSProvider):
+        def synthesize(
+            self,
+            text: str,
+            voice_profile: str,
+            target_duration_ms: int | None = None,
+            speaker_index: int | None = None,
+            voice_gender: str | None = None,
+        ) -> AudioResult:
+            received_speaker_indexes.append(speaker_index)
+            return AudioResult(audio_path=str(source_path), actual_duration_ms=2000)
+
+    monkeypatch.setattr(worker, "_get_tts_provider", lambda: _RecordingTTSProvider())
+
+    message = ArtifactQueueMessage(
+        artifact_id=uuid.uuid4(), segment_id=uuid.uuid4(), text="Hola", speaker_index=1
+    )
+    with _client_recording(calls) as client:
+        worker.process_artifact(client, "http://api", str(tmp_path), message)
+
+    assert received_speaker_indexes == [1]
+    assert calls[-1]["status"] == "completed"
+
+
+def test_process_artifact_passes_voice_gender_through_to_the_provider(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The API copies Media.voice_gender onto the queue message; the worker must hand
+    that to the TTS provider too, so a user's male/female preference actually applies."""
+    calls: list[Any] = []
+    received_voice_genders: list[str | None] = []
+    source_path = tmp_path / "speech.wav"
+    source_path.write_bytes(b"fake wav bytes")
+
+    class _RecordingTTSProvider(TTSProvider):
+        def synthesize(
+            self,
+            text: str,
+            voice_profile: str,
+            target_duration_ms: int | None = None,
+            speaker_index: int | None = None,
+            voice_gender: str | None = None,
+        ) -> AudioResult:
+            received_voice_genders.append(voice_gender)
+            return AudioResult(audio_path=str(source_path), actual_duration_ms=2000)
+
+    monkeypatch.setattr(worker, "_get_tts_provider", lambda: _RecordingTTSProvider())
+
+    message = ArtifactQueueMessage(
+        artifact_id=uuid.uuid4(), segment_id=uuid.uuid4(), text="Hola", voice_gender="male"
+    )
+    with _client_recording(calls) as client:
+        worker.process_artifact(client, "http://api", str(tmp_path), message)
+
+    assert received_voice_genders == ["male"]
+    assert calls[-1]["status"] == "completed"
+
+
 def test_process_artifact_empty_text_fails_without_calling_provider(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -353,7 +437,12 @@ def test_process_artifact_empty_text_fails_without_calling_provider(
 
     class _ShouldNotBeCalledTTSProvider(TTSProvider):
         def synthesize(
-            self, text: str, voice_profile: str, target_duration_ms: int | None = None
+            self,
+            text: str,
+            voice_profile: str,
+            target_duration_ms: int | None = None,
+            speaker_index: int | None = None,
+            voice_gender: str | None = None,
         ) -> AudioResult:
             nonlocal provider_called
             provider_called = True
@@ -380,7 +469,12 @@ def test_process_artifact_persists_audio_into_storage_dir(
 
     class _RealFileTTSProvider(TTSProvider):
         def synthesize(
-            self, text: str, voice_profile: str, target_duration_ms: int | None = None
+            self,
+            text: str,
+            voice_profile: str,
+            target_duration_ms: int | None = None,
+            speaker_index: int | None = None,
+            voice_gender: str | None = None,
         ) -> AudioResult:
             return AudioResult(audio_path=str(source_path), actual_duration_ms=1500)
 
@@ -750,7 +844,12 @@ def test_process_artifact_learns_the_voice_speed_from_real_takes(
 
     class _RealVoice(TTSProvider):
         def synthesize(
-            self, text: str, voice_profile: str, target_duration_ms: int | None = None
+            self,
+            text: str,
+            voice_profile: str,
+            target_duration_ms: int | None = None,
+            speaker_index: int | None = None,
+            voice_gender: str | None = None,
         ) -> AudioResult:
             path = tmp_path / "take.wav"
             path.write_bytes(b"RIFF....WAVEfmt ")
@@ -800,7 +899,12 @@ class _LengthVoice(TTSProvider):
         self.said: list[str] = []
 
     def synthesize(
-        self, text: str, voice_profile: str, target_duration_ms: int | None = None
+        self,
+        text: str,
+        voice_profile: str,
+        target_duration_ms: int | None = None,
+        speaker_index: int | None = None,
+        voice_gender: str | None = None,
     ) -> AudioResult:
         import wave
 

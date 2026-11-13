@@ -19,6 +19,7 @@ from dubforge_contracts.models import (
     JobRead,
     JobStatus,
     MediaRead,
+    VoiceGenderUpdate,
 )
 
 router = APIRouter(prefix="/projects", tags=["media"])
@@ -72,6 +73,22 @@ async def mark_ready_for_dubbing(media_id: uuid.UUID, db: AsyncSession = Depends
     await require_dub_ready(media_id, db, "marking ready for dubbing")
 
     media.ready_for_dubbing = True
+    await db.commit()
+    await db.refresh(media)
+    return media
+
+
+@media_router.put("/{media_id}/voice-gender", response_model=MediaRead)
+async def set_voice_gender(
+    media_id: uuid.UUID, body: VoiceGenderUpdate, db: AsyncSession = Depends(get_db)
+) -> Media:
+    """The preferred gender for this media's dominant/first speaker. Takes effect on the
+    next regenerate of each segment (not retroactive to already-generated audio)."""
+    media = await db.get(Media, media_id)
+    if media is None:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    media.voice_gender = body.voice_gender
     await db.commit()
     await db.refresh(media)
     return media
