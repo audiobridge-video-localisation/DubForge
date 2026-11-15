@@ -8,6 +8,9 @@ export interface Project {
 
 export type JobStatus = "pending" | "processing" | "completed" | "failed";
 
+/** Languages the pipeline can actually translate/dub into today. */
+export type TargetLang = "hi" | "bn";
+
 export type VoiceGender = "male" | "female" | null;
 
 export interface Media {
@@ -17,6 +20,7 @@ export interface Media {
   storage_path: string;
   created_at: string;
   ready_for_dubbing: boolean;
+  target_lang: TargetLang;
   voice_gender: VoiceGender;
 }
 
@@ -172,17 +176,20 @@ export interface UploadOptions {
   /** called with 0-100 as the file is sent */
   onProgress?: (percent: number) => void;
   signal?: AbortSignal;
+  /** language to translate and dub into; defaults server-side to "hi" if omitted */
+  targetLang?: TargetLang;
 }
 
 // XMLHttpRequest rather than fetch: fetch cannot report upload progress.
 export function uploadMedia(
   projectId: string,
   file: File,
-  { onProgress, signal }: UploadOptions = {},
+  { onProgress, signal, targetLang }: UploadOptions = {},
 ): Promise<MediaWithJob> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (targetLang) formData.append("target_lang", targetLang);
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_URL}/projects/${projectId}/media`);

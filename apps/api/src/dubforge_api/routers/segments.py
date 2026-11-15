@@ -181,6 +181,7 @@ async def regenerate_segment(
         ),
         source_text=segment.text,
         may_rewrite=segment.translation_source != TranslationSource.EDITED.value,
+        target_lang=media.target_lang,
         speaker_index=await _speaker_index(segment, db),
         voice_gender=media.voice_gender,
     )

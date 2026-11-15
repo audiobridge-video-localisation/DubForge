@@ -101,6 +101,7 @@ async def _create_export_job(
         media_id=media_id,
         kind=kind,
         media_storage_path=media.storage_path,
+        target_lang=media.target_lang,
     )
     try:
         await redis.rpush(EXPORT_QUEUE_KEY, message.model_dump_json())

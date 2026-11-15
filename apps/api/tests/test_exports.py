@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,18 +13,21 @@ from dubforge_api.main import app
 from dubforge_api.models import ExportJob
 
 
-async def _upload(client: AsyncClient) -> dict[str, Any]:
+async def _upload(client: AsyncClient, target_lang: str | None = None) -> dict[str, Any]:
     project = (await client.post("/projects", json={"name": "Export Target"})).json()
     response = await client.post(
         f"/projects/{project['id']}/media",
         files={"file": ("clip.mp4", b"bytes", "video/mp4")},
+        data={"target_lang": target_lang} if target_lang else None,
     )
     result: dict[str, Any] = response.json()
     return result
 
 
-async def _seed_segments(client: AsyncClient, count: int = 2) -> dict[str, Any]:
-    media_with_job = await _upload(client)
+async def _seed_segments(
+    client: AsyncClient, count: int = 2, target_lang: str | None = None
+) -> dict[str, Any]:
+    media_with_job = await _upload(client, target_lang)
     media_id = media_with_job["media"]["id"]
 
     segments = [
@@ -119,6 +123,21 @@ async def test_export_mp3_requires_full_readiness(
     assert body["status"] == "pending"
     export_calls = [c for c in fake_redis.calls if c[0] == "dubforge:exports"]
     assert len(export_calls) == 1
+
+
+async def test_export_queues_the_media_target_lang(
+    client: AsyncClient, fake_redis: FakeRedis
+) -> None:
+    media_with_job = await _seed_segments(client, count=1, target_lang="bn")
+    media_id = media_with_job["media"]["id"]
+    await _make_fully_ready(client, media_with_job)
+
+    response = await client.post(f"/media/{media_id}/export/mp3")
+
+    assert response.status_code == 201
+    export_calls = [c for c in fake_redis.calls if c[0] == "dubforge:exports"]
+    queued = json.loads(export_calls[-1][1])
+    assert queued["target_lang"] == "bn"
 
 
 async def test_export_mp4_requires_full_readiness(
