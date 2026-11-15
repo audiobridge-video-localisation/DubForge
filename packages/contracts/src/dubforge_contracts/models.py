@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Target languages the pipeline can actually translate/dub into today. Kept here (rather
 # than in the api or pipeline package) since both sides need to agree on what's valid: the
@@ -106,6 +106,19 @@ class MediaRead(BaseModel):
     created_at: datetime
     ready_for_dubbing: bool = False
     target_lang: str = DEFAULT_TARGET_LANG
+    voice_gender: str | None = None
+
+
+class VoiceGenderUpdate(BaseModel):
+    # None clears the preference (back to the provider's default voice order).
+    voice_gender: str | None = None
+
+    @field_validator("voice_gender")
+    @classmethod
+    def _validate_voice_gender(cls, value: str | None) -> str | None:
+        if value is not None and value not in ("male", "female"):
+            raise ValueError("voice_gender must be 'male', 'female', or null")
+        return value
 
 
 class JobRead(BaseModel):
@@ -273,6 +286,13 @@ class ArtifactQueueMessage(BaseModel):
     # The media's target language, copied in at regenerate time so the voice matches what
     # the line was actually translated into.
     target_lang: str = DEFAULT_TARGET_LANG
+    # Position of this segment's speaker among the media's distinct speakers, ordered by
+    # first appearance (0, 1, 2, ...). Lets the TTS provider pick a different voice per
+    # speaker from its per-language pool. None = use the pool's default voice.
+    speaker_index: int | None = None
+    # User's preferred gender ("male"/"female") for the dominant/first speaker
+    # (speaker_index 0), copied from Media.voice_gender. None = provider's default order.
+    voice_gender: str | None = None
 
 
 class ArtifactCallbackUpdate(BaseModel):

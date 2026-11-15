@@ -40,6 +40,27 @@ async def _get_artifact_for_segment(
     return result.scalar_one_or_none()
 
 
+async def _speaker_index(segment: SegmentModel, db: AsyncSession) -> int:
+    """This speaker's position among the media's distinct speakers, by first appearance
+    (chronological, i.e. Segment.index order) - so the TTS provider can give each speaker
+    a different voice from its per-language pool, consistently across regenerations."""
+    result = await db.execute(
+        select(SegmentModel.speaker_label)
+        .where(SegmentModel.media_id == segment.media_id)
+        .order_by(SegmentModel.index)
+    )
+    seen: list[str] = []
+    for (label,) in result.all():
+        if label not in seen:
+            seen.append(label)
+    try:
+        return seen.index(segment.speaker_label)
+    except ValueError:
+        # Shouldn't happen (segment's own label came from the same table), but default
+        # to the pool's first voice rather than failing regeneration over it.
+        return 0
+
+
 @router.patch("/{segment_id}", response_model=Segment)
 async def update_segment(
     segment_id: uuid.UUID, payload: SegmentUpdate, db: AsyncSession = Depends(get_db)
@@ -161,6 +182,8 @@ async def regenerate_segment(
         source_text=segment.text,
         may_rewrite=segment.translation_source != TranslationSource.EDITED.value,
         target_lang=media.target_lang,
+        speaker_index=await _speaker_index(segment, db),
+        voice_gender=media.voice_gender,
     )
     await redis.rpush(ARTIFACT_QUEUE_KEY, message.model_dump_json())
 

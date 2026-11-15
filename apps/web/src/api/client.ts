@@ -11,6 +11,8 @@ export type JobStatus = "pending" | "processing" | "completed" | "failed";
 /** Languages the pipeline can actually translate/dub into today. */
 export type TargetLang = "hi" | "bn";
 
+export type VoiceGender = "male" | "female" | null;
+
 export interface Media {
   id: string;
   project_id: string;
@@ -19,6 +21,7 @@ export interface Media {
   created_at: string;
   ready_for_dubbing: boolean;
   target_lang: TargetLang;
+  voice_gender: VoiceGender;
 }
 
 export interface Job {
@@ -253,6 +256,18 @@ export function requestSegmentChanges(segmentId: string): Promise<Segment> {
 export function markReadyForDubbing(mediaId: string): Promise<Media> {
   return request<Media>(`/media/${mediaId}/ready-for-dubbing`, {
     method: "POST",
+  });
+}
+
+/** Preferred gender for the dub's dominant/first speaker. Takes effect on the next
+ *  regenerate of each segment - it does not retroactively change already-generated audio. */
+export function setVoiceGender(
+  mediaId: string,
+  voiceGender: VoiceGender,
+): Promise<Media> {
+  return request<Media>(`/media/${mediaId}/voice-gender`, {
+    method: "PUT",
+    body: JSON.stringify({ voice_gender: voiceGender }),
   });
 }
 
