@@ -36,6 +36,9 @@ class Media(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     ready_for_dubbing: Mapped[bool] = mapped_column(nullable=False, default=False)
+    # User's preferred gender ("male"/"female") for the dub's dominant/first speaker.
+    # None = no preference; the TTS provider's default voice order is used.
+    voice_gender: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     project: Mapped[Project] = relationship(back_populates="media")
     job: Mapped["Job | None"] = relationship(back_populates="media", uselist=False)

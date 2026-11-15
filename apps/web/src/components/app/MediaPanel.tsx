@@ -4,6 +4,7 @@ import {
   type ExportJob,
   type ExportKind,
   type MediaWithJob,
+  type VoiceGender,
 } from "../../api/client";
 import {
   isAudioProblem,
@@ -38,6 +39,7 @@ export interface MediaPanelProps extends SegmentHandlers {
   batchRegenerateError: string | null;
   onRetry: (jobId: string) => Promise<void>;
   onReadyForDubbing: (mediaId: string) => void;
+  onVoiceGenderChange: (mediaId: string, voiceGender: VoiceGender) => void;
   onRegenerateProblems: (mediaId: string, segmentIds: string[]) => void;
   onExport: (
     mediaId: string,
@@ -89,6 +91,7 @@ export function MediaPanel({
   batchRegenerateError,
   onRetry,
   onReadyForDubbing,
+  onVoiceGenderChange,
   onRegenerateProblems,
   onExport,
   ...segmentHandlers
@@ -268,6 +271,25 @@ export function MediaPanel({
               label="Dubbed audio ready"
             />
             <div className="stats-actions">
+              <label
+                className="voice-gender-select"
+                title="Applies the next time a line's audio is generated - doesn't change audio already dubbed"
+              >
+                Dub voice:{" "}
+                <select
+                  value={media.voice_gender ?? ""}
+                  onChange={(e) =>
+                    onVoiceGenderChange(
+                      media.id,
+                      (e.target.value || null) as VoiceGender,
+                    )
+                  }
+                >
+                  <option value="">Default</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                </select>
+              </label>
               {needAudioIds.length > 0 && (
                 <button
                   type="button"
