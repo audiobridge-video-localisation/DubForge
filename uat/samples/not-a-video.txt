@@ -1,0 +1,1 @@
+This is not a video. Used by the UAT recorder to check the upload file check.
