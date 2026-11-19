@@ -1,0 +1,10 @@
+.draggable {
+  position: absolute;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.draggable.dragging {
+  cursor: grabbing;
+  z-index: 50;
+}

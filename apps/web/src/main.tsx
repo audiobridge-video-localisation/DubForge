@@ -1,10 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-function App() {
-  return <main><h1>DubForge</h1><p>Video localisation workspace</p></main>;
-}
+import { App } from "./App";
+import "./styles.css";
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode><App /></StrictMode>,
+  <StrictMode>
+    <App />
+  </StrictMode>,
 );
