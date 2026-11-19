@@ -1519,6 +1519,22 @@ a {
 .app .project-tile:focus-visible .tile-open {
   opacity: 1;
 }
+.app .project-item {
+  position: relative;
+}
+.app .project-item .project-tile strong {
+  padding-right: 64px;
+}
+.app .tile-delete {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+.app .tile-delete:hover:not(:disabled) {
+  border-color: #efb9b2;
+  background: #fdf1ef;
+  color: #8a1f17;
+}
 
 /* loading skeletons */
 .app .skeleton {

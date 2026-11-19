@@ -4,14 +4,17 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dubforge_api.config import Settings, get_settings
 from dubforge_api.db import get_db
+from dubforge_api.models import Artifact as ArtifactModel
 from dubforge_api.models import Job, Media, Project
+from dubforge_api.models import Segment as SegmentModel
 from dubforge_api.readiness import require_dub_ready
 from dubforge_api.redis_client import get_redis
-from dubforge_api.schemas import MediaWithJob
+from dubforge_api.schemas import MediaWithJob, rooms_by_segment, segment_to_contract
 from dubforge_api.storage import resolve_stored_file
 from dubforge_contracts.models import (
     DEFAULT_TARGET_LANG,
@@ -21,6 +24,8 @@ from dubforge_contracts.models import (
     JobRead,
     JobStatus,
     MediaRead,
+    Segment,
+    SegmentReviewStatus,
     VoiceGenderUpdate,
 )
 
@@ -110,6 +115,42 @@ async def set_voice_gender(
     await db.commit()
     await db.refresh(media)
     return media
+
+
+@media_router.post("/{media_id}/approve-all", response_model=list[Segment])
+async def approve_all_segments(
+    media_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> list[Segment]:
+    """Approve every line of this media in one go; returns all of its lines."""
+    media = await db.get(Media, media_id)
+    if media is None:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    segments = list(
+        (
+            await db.execute(
+                select(SegmentModel)
+                .where(SegmentModel.media_id == media_id)
+                .order_by(SegmentModel.index)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for segment in segments:
+        segment.review_status = SegmentReviewStatus.APPROVED.value
+    artifacts = (
+        await db.execute(
+            select(ArtifactModel).where(ArtifactModel.segment_id.in_([s.id for s in segments]))
+        )
+    ).scalars()
+    artifact_by_segment_id = {a.segment_id: a for a in artifacts}
+    await db.commit()
+
+    rooms = rooms_by_segment(segments)
+    return [
+        segment_to_contract(s, artifact_by_segment_id.get(s.id), rooms.get(s.id)) for s in segments
+    ]
 
 
 _SOURCE_MEDIA_TYPES = {

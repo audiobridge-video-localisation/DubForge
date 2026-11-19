@@ -5,7 +5,6 @@ today — this is an internal trust-boundary callback target for the worker.
 """
 
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import delete, select
@@ -16,6 +15,7 @@ from dubforge_api.db import get_db
 from dubforge_api.models import Artifact, ExportJob, Job, Media
 from dubforge_api.models import Segment as SegmentModel
 from dubforge_api.schemas import rooms_by_segment, segment_to_contract
+from dubforge_api.storage import remove_stored_file
 from dubforge_contracts.models import (
     Artifact as ArtifactContract,
 )
@@ -32,16 +32,6 @@ from dubforge_contracts.models import (
 )
 
 router = APIRouter(prefix="/internal", tags=["internal"])
-
-
-def _remove_stored_file(storage_dir: str, relative_path: str | None) -> None:
-    """Best-effort delete of a file the database no longer refers to."""
-    if not relative_path:
-        return
-    root = Path(storage_dir).resolve()
-    path = (root / relative_path).resolve()
-    if path.is_relative_to(root):
-        path.unlink(missing_ok=True)
 
 
 @router.patch("/jobs/{job_id}", response_model=JobRead)
@@ -104,7 +94,7 @@ async def replace_segments(
     )
     await db.commit()
     for audio_path in old_audio:
-        _remove_stored_file(settings.storage_dir, audio_path)
+        remove_stored_file(settings.storage_dir, audio_path)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
