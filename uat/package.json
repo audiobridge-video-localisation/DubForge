@@ -1,0 +1,12 @@
+{
+  "name": "dubforge-uat-recorder",
+  "private": true,
+  "type": "module",
+  "description": "Records the UAT walkthroughs: a screenshot per step, a video per flow, and a visual guide.",
+  "scripts": {
+    "record": "node record.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.48.2"
+  }
+}

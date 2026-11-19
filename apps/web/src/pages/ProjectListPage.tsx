@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { createProject, listProjects, type Project } from "../api/client";
+import {
+  createProject,
+  deleteProject,
+  listProjects,
+  type Project,
+} from "../api/client";
 import { AppShell, PageHeading } from "../components/app/AppShell";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { relativeTime } from "../lib/workflow";
@@ -15,6 +20,9 @@ export function ProjectListPage() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
@@ -54,6 +62,28 @@ export function ProjectListPage() {
     } catch (err) {
       setCreateError((err as Error).message);
       setCreating(false);
+    }
+  }
+
+  async function handleDelete(project: Project) {
+    if (
+      !window.confirm(
+        `Delete "${project.name}"? Its videos, lines, dubbed audio and exports will be removed for good.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingId(project.id);
+    setDeleteError(null);
+    try {
+      await deleteProject(project.id);
+      setProjects((current) => current.filter((p) => p.id !== project.id));
+    } catch (err) {
+      setDeleteError(
+        `Couldn't delete "${project.name}": ${(err as Error).message}`,
+      );
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -125,6 +155,12 @@ export function ProjectListPage() {
         </div>
       )}
 
+      {deleteError && (
+        <div className="banner banner-danger" role="alert">
+          <span>{deleteError}</span>
+        </div>
+      )}
+
       {loading && (
         <ul className="project-grid" aria-hidden="true">
           {[0, 1, 2].map((i) => (
@@ -143,7 +179,7 @@ export function ProjectListPage() {
       {projects.length > 0 && (
         <ul className="project-grid">
           {projects.map((project) => (
-            <li key={project.id}>
+            <li key={project.id} className="project-item">
               <Link
                 className="card project-tile"
                 to={`/projects/${project.id}`}
@@ -156,6 +192,15 @@ export function ProjectListPage() {
                   Open ↗
                 </span>
               </Link>
+              <button
+                type="button"
+                className="btn btn-sm btn-quiet tile-delete"
+                aria-label={`Delete project ${project.name}`}
+                disabled={deletingId !== null}
+                onClick={() => handleDelete(project)}
+              >
+                {deletingId === project.id ? "Deleting…" : "Delete"}
+              </button>
             </li>
           ))}
         </ul>

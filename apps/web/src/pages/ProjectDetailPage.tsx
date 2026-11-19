@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
+  approveAllSegments,
   approveSegment,
   exportMp3,
   exportMp4,
@@ -211,6 +212,32 @@ export function ProjectDetailPage() {
     applySegmentUpdate(mediaId, segmentId, updated);
   }
 
+  async function handleApproveAll(mediaId: string) {
+    setDubbingError((current) => ({ ...current, [mediaId]: null }));
+    try {
+      const segments = await approveAllSegments(mediaId);
+      setMedia((current) =>
+        current.map((item) =>
+          item.media.id === mediaId
+            ? {
+                ...item,
+                segments,
+                approved_count: segments.filter(
+                  (s) => s.review_status === "approved",
+                ).length,
+                total_count: segments.length,
+              }
+            : item,
+        ),
+      );
+    } catch (err) {
+      setDubbingError((current) => ({
+        ...current,
+        [mediaId]: (err as Error).message,
+      }));
+    }
+  }
+
   async function handleSegmentRequestChanges(
     mediaId: string,
     segmentId: string,
@@ -411,6 +438,7 @@ export function ProjectDetailPage() {
               batchRegenerateError={batchRegenerateError[item.media.id] ?? null}
               onRetry={handleRetry}
               onReadyForDubbing={handleReadyForDubbing}
+              onApproveAll={handleApproveAll}
               onVoiceGenderChange={handleVoiceGenderChange}
               onRegenerateProblems={handleRegenerateProblemAudio}
               onExport={handleExport}

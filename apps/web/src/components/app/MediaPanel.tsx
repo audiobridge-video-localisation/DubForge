@@ -44,6 +44,7 @@ export interface MediaPanelProps extends SegmentHandlers {
   batchRegenerateError: string | null;
   onRetry: (jobId: string) => Promise<void>;
   onReadyForDubbing: (mediaId: string) => void;
+  onApproveAll: (mediaId: string) => Promise<void>;
   onVoiceGenderChange: (mediaId: string, voiceGender: VoiceGender) => void;
   onRegenerateProblems: (mediaId: string, segmentIds: string[]) => void;
   onExport: (
@@ -96,6 +97,7 @@ export function MediaPanel({
   batchRegenerateError,
   onRetry,
   onReadyForDubbing,
+  onApproveAll,
   onVoiceGenderChange,
   onRegenerateProblems,
   onExport,
@@ -121,6 +123,7 @@ export function MediaPanel({
     void el.play().catch(() => undefined);
   }
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [approvingAll, setApprovingAll] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
   const processing = isJobInFlight(job);
@@ -134,6 +137,26 @@ export function MediaPanel({
     .map((s) => s.id);
   const allApproved = total_count > 0 && approved_count === total_count;
   const dubReady = allApproved && usable_audio_count === total_count;
+  async function approveAll() {
+    const flagged = segments.filter(
+      (s) => s.review_status === "needs_changes",
+    ).length;
+    if (
+      flagged > 0 &&
+      !window.confirm(
+        `${flagged} line${flagged === 1 ? " is" : "s are"} marked "needs changes". Approve ${flagged === 1 ? "it" : "them"} too?`,
+      )
+    ) {
+      return;
+    }
+    setApprovingAll(true);
+    try {
+      await onApproveAll(media.id);
+    } finally {
+      setApprovingAll(false);
+    }
+  }
+
   async function retry() {
     setRetrying(true);
     setRetryError(null);
@@ -320,6 +343,18 @@ export function MediaPanel({
                   {batchRegenerating
                     ? "Regenerating…"
                     : `Regenerate problem audio (${problemIds.length})`}
+                </button>
+              )}
+              {!allApproved && (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={approvingAll}
+                  onClick={approveAll}
+                >
+                  {approvingAll
+                    ? "Approving…"
+                    : `Approve all (${total_count - approved_count})`}
                 </button>
               )}
               <button

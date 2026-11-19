@@ -154,11 +154,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(await parseErrorMessage(response));
   }
 
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
 export function listProjects(): Promise<Project[]> {
   return request<Project[]>("/projects");
+}
+
+/** Deletes the project with all its videos, lines, dubbed audio and exports. */
+export function deleteProject(id: string): Promise<void> {
+  return request<void>(`/projects/${id}`, { method: "DELETE" });
 }
 
 export function getProject(id: string): Promise<ProjectDetail> {
@@ -245,6 +251,13 @@ export function updateSegment(
 
 export function approveSegment(segmentId: string): Promise<Segment> {
   return request<Segment>(`/segments/${segmentId}/approve`, { method: "POST" });
+}
+
+/** Approves every line of one video; resolves to all of its lines. */
+export function approveAllSegments(mediaId: string): Promise<Segment[]> {
+  return request<Segment[]>(`/media/${mediaId}/approve-all`, {
+    method: "POST",
+  });
 }
 
 export function requestSegmentChanges(segmentId: string): Promise<Segment> {

@@ -183,3 +183,36 @@ async def test_ready_for_dubbing_not_found(client: AsyncClient) -> None:
     response = await client.post(f"/media/{uuid.uuid4()}/ready-for-dubbing")
 
     assert response.status_code == 404
+
+
+async def test_approve_all_approves_every_line_of_the_media(client: AsyncClient) -> None:
+    project_id, media_id, segments = await _seed_segments(client, 3)
+    await client.post(f"/segments/{segments[0]['id']}/approve")
+    await client.post(f"/segments/{segments[1]['id']}/request-changes")
+
+    response = await client.post(f"/media/{media_id}/approve-all")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [s["id"] for s in body] == [s["id"] for s in segments]
+    assert {s["review_status"] for s in body} == {"approved"}
+
+    detail = (await client.get(f"/projects/{project_id}")).json()["media"][0]
+    assert detail["approved_count"] == 3
+    assert detail["total_count"] == 3
+
+
+async def test_approve_all_leaves_other_media_alone(client: AsyncClient) -> None:
+    _, media_id, _ = await _seed_segments(client, 1)
+    other_project_id, _, _ = await _seed_segments(client, 2)
+
+    await client.post(f"/media/{media_id}/approve-all")
+
+    other = (await client.get(f"/projects/{other_project_id}")).json()["media"][0]
+    assert other["approved_count"] == 0
+
+
+async def test_approve_all_media_not_found(client: AsyncClient) -> None:
+    response = await client.post(f"/media/{uuid.uuid4()}/approve-all")
+
+    assert response.status_code == 404
