@@ -22,9 +22,13 @@ from dubforge_api.storage import remove_stored_dir, remove_stored_file
 from dubforge_contracts.models import (
     USABLE_AUDIO_STATUSES,
     JobRead,
+    JobStatus,
     MediaRead,
     SegmentReviewStatus,
 )
+
+# Job, ExportJob and Artifact all use these same two string values for "still running".
+_IN_FLIGHT = (JobStatus.PENDING.value, JobStatus.PROCESSING.value)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -112,6 +116,42 @@ async def delete_project(
     # No ON DELETE CASCADE on these foreign keys, so children go first.
     media_ids = select(Media.id).where(Media.project_id == project_id)
     segment_ids = select(SegmentModel.id).where(SegmentModel.media_id.in_(media_ids))
+
+    # A job/export still running (or a line's audio still regenerating) can write a file
+    # under this project after we've deleted its row, orphaning it. Block the delete while
+    # any of those are in flight rather than race them; this is a best-effort check (not a
+    # lock), but it closes the common case of deleting mid-upload or mid-export.
+    in_flight = (
+        (
+            await db.execute(
+                select(Job.id).where(Job.media_id.in_(media_ids), Job.status.in_(_IN_FLIGHT))
+            )
+        ).first()
+        or (
+            await db.execute(
+                select(ExportJob.id).where(
+                    ExportJob.media_id.in_(media_ids), ExportJob.status.in_(_IN_FLIGHT)
+                )
+            )
+        ).first()
+        or (
+            await db.execute(
+                select(ArtifactModel.id).where(
+                    ArtifactModel.segment_id.in_(segment_ids),
+                    ArtifactModel.status.in_(_IN_FLIGHT),
+                )
+            )
+        ).first()
+    )
+    if in_flight is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This project has a video, export, or line still processing. "
+                "Wait for it to finish (or fail), then try deleting again."
+            ),
+        )
+
     audio_paths = (
         (
             await db.execute(

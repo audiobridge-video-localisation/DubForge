@@ -54,6 +54,9 @@ async def _seed_full_project(client: AsyncClient, storage: Path) -> dict[str, An
         )
     ).json()
     media_id = media_with_job["media"]["id"]
+    await client.patch(
+        f"/internal/jobs/{media_with_job['job']['id']}", json={"status": "completed"}
+    )
     await client.put(
         f"/internal/media/{media_id}/segments",
         json=[
@@ -129,3 +132,85 @@ async def test_delete_project_not_found(client: AsyncClient) -> None:
     response = await client.delete(f"/projects/{uuid.uuid4()}")
 
     assert response.status_code == 404
+
+
+async def test_delete_project_blocked_while_its_job_is_still_running(
+    client: AsyncClient,
+) -> None:
+    project = (await client.post("/projects", json={"name": "Mid-upload"})).json()
+    await client.post(
+        f"/projects/{project['id']}/media",
+        files={"file": ("clip.mp4", b"bytes", "video/mp4")},
+    )
+    # freshly uploaded media's job is still "pending" - nothing has touched it yet
+
+    response = await client.delete(f"/projects/{project['id']}")
+
+    assert response.status_code == 409
+    assert (await client.get(f"/projects/{project['id']}")).status_code == 200
+
+
+async def test_delete_project_blocked_while_a_line_is_still_regenerating(
+    client: AsyncClient,
+) -> None:
+    project = (await client.post("/projects", json={"name": "Mid-regenerate"})).json()
+    media_id = (
+        await client.post(
+            f"/projects/{project['id']}/media",
+            files={"file": ("clip.mp4", b"bytes", "video/mp4")},
+        )
+    ).json()["media"]["id"]
+    await client.put(
+        f"/internal/media/{media_id}/segments",
+        json=[
+            {
+                "index": 0,
+                "start_ms": 0,
+                "end_ms": 1000,
+                "duration_ms": 1000,
+                "speaker_label": "Speaker 0",
+                "text": "Line",
+                "translated_text": "[hi] Line",
+            }
+        ],
+    )
+    segment_id = (await client.get(f"/projects/{project['id']}")).json()["media"][0]["segments"][0][
+        "id"
+    ]
+    await client.post(f"/segments/{segment_id}/regenerate")
+    # the artifact the regenerate created is still "pending" - the worker hasn't called back yet
+
+    response = await client.delete(f"/projects/{project['id']}")
+
+    assert response.status_code == 409
+
+
+async def test_delete_project_blocked_while_an_export_is_still_running(
+    client: AsyncClient,
+) -> None:
+    seeded = await _seed_full_project(
+        client, Path(app.dependency_overrides[get_settings]().storage_dir)
+    )
+    # _seed_full_project's export job is already completed; start a second one and leave it
+    # pending so this test is about the export, not the one _seed_full_project finished.
+    await client.post(f"/media/{seeded['media_id']}/export/mp4")
+
+    response = await client.delete(f"/projects/{seeded['project_id']}")
+
+    assert response.status_code == 409
+
+
+async def test_delete_project_allowed_once_its_job_fails(client: AsyncClient) -> None:
+    project = (await client.post("/projects", json={"name": "Failed upload"})).json()
+    media_with_job = (
+        await client.post(
+            f"/projects/{project['id']}/media",
+            files={"file": ("clip.mp4", b"bytes", "video/mp4")},
+        )
+    ).json()
+    job_id = media_with_job["job"]["id"]
+    await client.patch(f"/internal/jobs/{job_id}", json={"status": "failed"})
+
+    response = await client.delete(f"/projects/{project['id']}")
+
+    assert response.status_code == 204
